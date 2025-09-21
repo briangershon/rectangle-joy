@@ -21,8 +21,8 @@
   const DEFAULT_CONFIG = Object.freeze({
     color: "#1f77b4",
     count: 1000,
-    minSize: 20,
-    maxSize: 70,
+    minSize: 5,
+    maxSize: 50,
     colorZones: [], // Array of {x, y, radius, color} objects
   });
 
@@ -101,56 +101,23 @@
   }
 
   // Color zone utilities
-  function calculateZoneCoverage(rect, zone) {
-    // Calculate what percentage of the rectangle is inside the circular zone
+
+  function getEffectiveColor(rect, zones, defaultColor) {
+    // Simple center-point check: if rectangle center is inside any zone, use that zone's color
     const rectCenterX = rect.x + rect.w / 2;
     const rectCenterY = rect.y + rect.h / 2;
 
-    // Use zone coordinates directly (assume they're already in CSS pixels)
-    const zoneX = zone.x;
-    const zoneY = zone.y;
-    const zoneRadius = zone.radius;
-
-    // Simple approximation: if rectangle center is within zone radius, consider it covered
-    const distanceToZoneCenter = Math.hypot(rectCenterX - zoneX, rectCenterY - zoneY);
-
-    if (distanceToZoneCenter <= zoneRadius) {
-      // Calculate coverage based on how much of the rectangle fits within the circle
-      const rectRadius = Math.hypot(rect.w / 2, rect.h / 2);
-      if (distanceToZoneCenter + rectRadius <= zoneRadius) {
-        return 1.0; // Fully inside
-      } else {
-        // Partial coverage - simplified linear interpolation
-        const overlapDistance = zoneRadius - distanceToZoneCenter;
-        return Math.max(0, Math.min(1, overlapDistance / rectRadius));
-      }
-    }
-
-    return 0;
-  }
-
-  function getEffectiveColor(rect, zones, defaultColor) {
-    // Find the zone with the highest coverage for this rectangle
-    let bestZone = null;
-    let bestCoverage = 0;
-
     for (const zone of zones) {
-      const coverage = calculateZoneCoverage(rect, zone);
-      if (coverage > bestCoverage) {
-        bestCoverage = coverage;
-        bestZone = zone;
+      const distanceToZoneCenter = Math.hypot(
+        rectCenterX - zone.x,
+        rectCenterY - zone.y
+      );
+      if (distanceToZoneCenter <= zone.radius) {
+        return zone.color; // First matching zone wins
       }
     }
 
-    // Use zone color if coverage is > 5% (very low threshold for maximum zone visibility)
-    const useZoneColor = bestCoverage > 0.05 && bestZone;
-
-    // Debug: Log coverage for first few rectangles to understand what's happening
-    if (rect.x < 100 && rect.y < 100) {
-      console.log(`Debug: Rect at (${rect.x},${rect.y}) coverage: ${bestCoverage.toFixed(3)}, using zone color: ${useZoneColor}, zone:`, bestZone?.color);
-    }
-
-    return useZoneColor ? bestZone.color : defaultColor;
+    return defaultColor; // Not in any zone
   }
 
   // Validate a candidate rectangle against existing ones, allowing nesting with ≥ GAP margin.
@@ -189,7 +156,9 @@
 
   // Try to place `targetCount` rectangles with random sizes in [minSize, maxSize].
   function generateRectangles(width, height, targetCount, minSize, maxSize) {
-    console.log(`Debug: Generating rectangles - target: ${targetCount}, canvas: ${width}x${height}, size: ${minSize}-${maxSize}`);
+    console.log(
+      `Debug: Generating rectangles - target: ${targetCount}, canvas: ${width}x${height}, size: ${minSize}-${maxSize}`
+    );
 
     const rects = [];
     let attempts = 0;
@@ -217,11 +186,15 @@
 
       // Log progress every 1000 attempts
       if (attempts % 1000 === 0) {
-        console.log(`Debug: Rectangle generation progress: ${rects.length}/${targetCount} placed, ${attempts} attempts`);
+        console.log(
+          `Debug: Rectangle generation progress: ${rects.length}/${targetCount} placed, ${attempts} attempts`
+        );
       }
     }
 
-    console.log(`Debug: Rectangle generation complete: ${rects.length}/${targetCount} rectangles placed in ${attempts} attempts`);
+    console.log(
+      `Debug: Rectangle generation complete: ${rects.length}/${targetCount} rectangles placed in ${attempts} attempts`
+    );
     return rects;
   }
 
@@ -235,7 +208,16 @@
 
     // Draw color zones first (as semi-transparent guides)
     if (colorZones.length > 0) {
-      console.log("Debug: Drawing", colorZones.length, "color zones on canvas", canvas.width, "x", canvas.height, ":", colorZones);
+      console.log(
+        "Debug: Drawing",
+        colorZones.length,
+        "color zones on canvas",
+        canvas.width,
+        "x",
+        canvas.height,
+        ":",
+        colorZones
+      );
       ctx.globalAlpha = 0.4; // Much more visible for debugging
       for (const zone of colorZones) {
         // Test: Use zone coordinates directly (assuming they're already in CSS pixels)
@@ -252,11 +234,28 @@
         const zoneYDivided = zone.y / dpr;
         const zoneRadiusDivided = zone.radius / dpr;
 
-        console.log(`Debug: Zone raw values: (${zone.x},${zone.y}) radius ${zone.radius}`);
-        console.log(`Debug: Canvas CSS size: ${cssCanvasWidth} x ${cssCanvasHeight}`);
-        console.log(`Debug: Direct approach: (${zoneXDirect},${zoneYDirect}) radius ${zoneRadiusDirect}`);
-        console.log(`Debug: Divided approach: (${zoneXDivided},${zoneYDivided}) radius ${zoneRadiusDivided}`);
-        console.log(`Debug: Direct percentages: X=${(zoneXDirect/cssCanvasWidth*100).toFixed(1)}%, Y=${(zoneYDirect/cssCanvasHeight*100).toFixed(1)}%, R=${(zoneRadiusDirect/cssCanvasWidth*100).toFixed(1)}% of width`);
+        console.log(
+          `Debug: Zone raw values: (${zone.x},${zone.y}) radius ${zone.radius}`
+        );
+        console.log(
+          `Debug: Canvas CSS size: ${cssCanvasWidth} x ${cssCanvasHeight}`
+        );
+        console.log(
+          `Debug: Direct approach: (${zoneXDirect},${zoneYDirect}) radius ${zoneRadiusDirect}`
+        );
+        console.log(
+          `Debug: Divided approach: (${zoneXDivided},${zoneYDivided}) radius ${zoneRadiusDivided}`
+        );
+        console.log(
+          `Debug: Direct percentages: X=${(
+            (zoneXDirect / cssCanvasWidth) *
+            100
+          ).toFixed(1)}%, Y=${((zoneYDirect / cssCanvasHeight) * 100).toFixed(
+            1
+          )}%, R=${((zoneRadiusDirect / cssCanvasWidth) * 100).toFixed(
+            1
+          )}% of width`
+        );
 
         // Use direct coordinates (assume AI gives CSS pixel values)
         ctx.fillStyle = zone.color;
@@ -290,16 +289,11 @@
     }
 
     const color = parseColor(config.color);
-    const minSize = clampNumber(
-      config.minSize,
-      20,
-      40,
-      DEFAULT_CONFIG.minSize
-    );
+    const minSize = clampNumber(config.minSize, 5, 30, DEFAULT_CONFIG.minSize);
     const maxCandidate = clampNumber(
       config.maxSize,
-      60,
-      80,
+      10,
+      50,
       Math.max(DEFAULT_CONFIG.maxSize, minSize)
     );
     const maxSize = Math.max(minSize, maxCandidate);
@@ -315,17 +309,18 @@
     }
 
     return zones
-      .filter(zone => zone && typeof zone === "object")
-      .map(zone => ({
+      .filter((zone) => zone && typeof zone === "object")
+      .map((zone) => ({
         x: Number(zone.x) || 0,
         y: Number(zone.y) || 0,
         radius: Math.max(1, Number(zone.radius) || 50),
-        color: parseColor(zone.color)
+        color: parseColor(zone.color),
       }))
-      .filter(zone =>
-        Number.isFinite(zone.x) &&
-        Number.isFinite(zone.y) &&
-        Number.isFinite(zone.radius)
+      .filter(
+        (zone) =>
+          Number.isFinite(zone.x) &&
+          Number.isFinite(zone.y) &&
+          Number.isFinite(zone.radius)
       );
   }
 
@@ -360,9 +355,15 @@
     });
     activeConfig = safeConfig;
     activeSourceLabel = sourceLabel;
+
+    // Calculate CSS pixel dimensions for rectangle generation
+    const dpr = window.devicePixelRatio || 1;
+    const cssWidth = canvas.width / dpr;
+    const cssHeight = canvas.height / dpr;
+
     const rects = generateRectangles(
-      canvas.width,
-      canvas.height,
+      cssWidth,
+      cssHeight,
       safeConfig.count,
       safeConfig.minSize,
       safeConfig.maxSize
@@ -375,8 +376,17 @@
     console.log("Debug: runWithArtPlan called with:", artPlan);
 
     if (!artPlan || !artPlan.rectangles || !artPlan.colorZones) {
-      console.log("Debug: Invalid art plan structure:", { artPlan, hasRectangles: !!artPlan?.rectangles, hasColorZones: !!artPlan?.colorZones });
+      console.log("Debug: Invalid art plan structure:", {
+        artPlan,
+        hasRectangles: !!artPlan?.rectangles,
+        hasColorZones: !!artPlan?.colorZones,
+      });
       throw new Error("Invalid art plan structure");
+    }
+
+    // Log the selected emoji if available
+    if (artPlan.selectedEmoji) {
+      console.log(`🎯 Executing art plan for emoji: ${artPlan.selectedEmoji}`);
     }
 
     console.log("Debug: Art plan rectangles config:", artPlan.rectangles);
@@ -429,13 +439,23 @@
       // Ensure canvas is properly sized before getting dimensions
       resizeCanvasToDisplaySize();
 
-      // Get actual canvas dimensions for AI planning
-      const canvasWidth = canvas.width;
-      const canvasHeight = canvas.height;
+      // Get CSS canvas dimensions for AI planning
+      const dpr = window.devicePixelRatio || 1;
+      const canvasWidth = canvas.width / dpr;
+      const canvasHeight = canvas.height / dpr;
 
-      console.log("Debug: Sending canvas dimensions to AI:", canvasWidth, "x", canvasHeight);
+      console.log(
+        "Debug: Sending canvas dimensions to AI:",
+        canvasWidth,
+        "x",
+        canvasHeight
+      );
 
-      const result = await LLMRectangles.processPrompt(promptText, canvasWidth, canvasHeight);
+      const result = await LLMRectangles.processPrompt(
+        promptText,
+        canvasWidth,
+        canvasHeight
+      );
 
       if (result.type === "rectangles") {
         runWithConfig(result.config, "AI rectangles");

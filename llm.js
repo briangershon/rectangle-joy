@@ -5,24 +5,25 @@
     "Rules:",
     "- color: CSS hex string (#rrggbb).",
     "- count: integer 500-5000.",
-    "- minSize: integer 20-40.",
-    "- maxSize: integer 60-80 and >= minSize.",
+    "- minSize: integer 5-30.",
+    "- maxSize: integer 10-50 and >= minSize.",
     "Omitted values should fall back to sensible defaults within range.",
   ].join(" ");
 
   const ART_PLANNER_SYSTEM_PROMPT = [
     "You are an Emoji-Guided Rectangle Art Planner. For each prompt, first identify the most relevant emoji, then use its visual structure to create color zones.",
-    'Respond with valid JSON matching: { "colorZones": [{"x": number, "y": number, "radius": number, "color": string}], "rectangles": {"color": string, "count": number, "minSize": number, "maxSize": number} }.',
+    'Respond with valid JSON matching: { "selectedEmoji": string, "colorZones": [{"x": number, "y": number, "radius": number, "color": string}], "rectangles": {"color": string, "count": number, "minSize": number, "maxSize": number} }.',
     "Emoji-Guided Process:",
     "1. Identify the best emoji that matches the prompt (e.g., 'happy face' → 😊, 'two eyes' → 👀, 'heart' → ❤️)",
     "2. Analyze the emoji's visual structure (position of features, colors, proportions)",
-    "3. Create massive color zones that replicate the emoji's layout on the canvas",
+    "3. Create appropriately-sized color zones that replicate the emoji's layout on the canvas",
     "Rules:",
+    "- selectedEmoji: The actual emoji character you identified (e.g., '😊', '👀', '❤️'). Include exactly the emoji character you chose from the mappings below.",
     "- colorZones: Array of circular zones. x,y coordinates in pixels (0 to canvas size), radius in pixels.",
     "- rectangles.color: Default CSS hex string for background rectangles.",
     "- rectangles.count: integer 1000-5000.",
     "- rectangles.minSize: integer 10-30, rectangles.maxSize: integer 20-50.",
-    "- Zone radii must be MASSIVE (30-50% of canvas width) to be clearly visible.",
+    "- Zone radii should be proportional to the object being created (5-25% of canvas width for most features, larger for dominant elements).",
     "- Use emoji proportions: Face features typically at 25% and 75% horizontally for eyes.",
     "Emoji Mappings:",
     "- 'happy face/smile' → 😊: 2 black eye zones at (25%W,35%H) and (75%W,35%H), 1 red mouth zone at (50%W,65%H), each radius=20%W",
@@ -30,8 +31,9 @@
     "- 'angry face' → 😠: 2 red angled eye zones at (25%W,30%H) and (75%W,30%H), 1 black mouth at (50%W,70%H)",
     "- 'heart' → ❤️: 1 large red zone at (50%W,50%H), radius=35%W",
     "- 'sun' → ☀️: 1 yellow central zone at (50%W,50%H), radius=30%W",
+    "- 'traffic light' → 🚦: 3 vertically stacked zones: red at (50%W,25%H), yellow at (50%W,50%H), green at (50%W,75%H), each radius=8-12%W",
     "- Use contrasting colors against light yellow background (#ffff00): black (#000000), red (#ff0000), blue (#0000ff), white (#ffffff).",
-    "- Assume canvas is roughly 800x600 pixels for zone positioning.",
+    "- CANVAS_SIZE_PLACEHOLDER",
   ].join(" ");
 
   const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
@@ -57,14 +59,14 @@
         },
         minSize: {
           type: "integer",
-          minimum: 20,
-          maximum: 40,
+          minimum: 5,
+          maximum: 30,
           description: "Minimum rectangle size in pixels"
         },
         maxSize: {
           type: "integer",
-          minimum: 60,
-          maximum: 80,
+          minimum: 10,
+          maximum: 50,
           description: "Maximum rectangle size in pixels"
         }
       },
@@ -80,6 +82,10 @@
     parameters: {
       type: "object",
       properties: {
+        selectedEmoji: {
+          type: "string",
+          description: "The emoji character that was identified and used as the visual guide (e.g., '😊', '👀', '❤️')"
+        },
         colorZones: {
           type: "array",
           items: {
@@ -145,7 +151,7 @@
           additionalProperties: false
         }
       },
-      required: ["colorZones", "rectangles"],
+      required: ["selectedEmoji", "colorZones", "rectangles"],
       additionalProperties: false
     }
   };
@@ -180,13 +186,13 @@
       },
       minSize: {
         type: "integer",
-        minimum: 20,
-        maximum: 40,
+        minimum: 5,
+        maximum: 30,
       },
       maxSize: {
         type: "integer",
-        minimum: 60,
-        maximum: 80,
+        minimum: 10,
+        maximum: 50,
       },
     },
     required: ["color", "count", "minSize", "maxSize"],
@@ -196,6 +202,10 @@
     type: "object",
     additionalProperties: false,
     properties: {
+      selectedEmoji: {
+        type: "string",
+        description: "The emoji character that was identified and used as the visual guide"
+      },
       colorZones: {
         type: "array",
         items: {
@@ -253,7 +263,7 @@
         required: ["color", "count", "minSize", "maxSize"],
       },
     },
-    required: ["colorZones", "rectangles"],
+    required: ["selectedEmoji", "colorZones", "rectangles"],
   };
 
   function isApiKeyAvailable() {
@@ -445,21 +455,61 @@
 
     // Create dynamic system prompt with actual canvas dimensions
     const canvasInfo = `Canvas is ${canvasWidth}x${canvasHeight} pixels. Use emoji as visual guide: calculate zone positions as percentages of canvas size. For eyes, use radius = 40-45% of canvas width (${Math.round(canvasWidth * 0.4)}-${Math.round(canvasWidth * 0.45)}px). Scale all emoji features proportionally to canvas size.`;
-    const dynamicSystemPrompt = ROUTER_SYSTEM_PROMPT.replace(
-      "Assume canvas is roughly 800x600 pixels for zone positioning.",
+
+    // Create combined system prompt that includes both router and art planner instructions
+    const dynamicArtPlannerSystemPrompt = ART_PLANNER_SYSTEM_PROMPT.replace(
+      "CANVAS_SIZE_PLACEHOLDER",
       canvasInfo
     );
 
+    const combinedSystemPrompt = ROUTER_SYSTEM_PROMPT + "\n\nWhen using create_art_plan tool:\n" + dynamicArtPlannerSystemPrompt;
+
     console.log("Debug: Canvas info for AI:", canvasInfo);
+
+    // Create dynamic art planner tool with canvas dimensions
+    const dynamicArtPlannerTool = {
+      ...ART_PLANNER_TOOL,
+      description: `Create artistic layouts with color zones and strategic rectangle placement for recognizable patterns, shapes, or artwork. Canvas is ${canvasWidth}x${canvasHeight} pixels. All coordinates and radii must be within these bounds.`,
+      parameters: {
+        ...ART_PLANNER_TOOL.parameters,
+        properties: {
+          ...ART_PLANNER_TOOL.parameters.properties,
+          colorZones: {
+            ...ART_PLANNER_TOOL.parameters.properties.colorZones,
+            items: {
+              ...ART_PLANNER_TOOL.parameters.properties.colorZones.items,
+              properties: {
+                ...ART_PLANNER_TOOL.parameters.properties.colorZones.items.properties,
+                x: {
+                  ...ART_PLANNER_TOOL.parameters.properties.colorZones.items.properties.x,
+                  maximum: canvasWidth,
+                  description: `X coordinate in pixels (0 to ${canvasWidth})`
+                },
+                y: {
+                  ...ART_PLANNER_TOOL.parameters.properties.colorZones.items.properties.y,
+                  maximum: canvasHeight,
+                  description: `Y coordinate in pixels (0 to ${canvasHeight})`
+                },
+                radius: {
+                  ...ART_PLANNER_TOOL.parameters.properties.colorZones.items.properties.radius,
+                  maximum: Math.min(canvasWidth, canvasHeight),
+                  description: `Zone radius in pixels (max ${Math.min(canvasWidth, canvasHeight)} for this canvas)`
+                }
+              }
+            }
+          }
+        }
+      }
+    };
 
     const payload = {
       model: "gpt-4o-mini",
       temperature: 0.2,
       input: [
-        { role: "system", content: dynamicSystemPrompt },
+        { role: "system", content: combinedSystemPrompt },
         { role: "user", content: userPrompt },
       ],
-      tools: [RECTANGLE_TOOL, ART_PLANNER_TOOL],
+      tools: [RECTANGLE_TOOL, dynamicArtPlannerTool],
     };
 
     console.log("Debug: Request payload:", JSON.stringify(payload, null, 2));
@@ -559,6 +609,12 @@
 
           throw new Error(`Failed to parse create_art_plan arguments: ${parseError.message}`);
         }
+
+        // Log the selected emoji
+        if (config.selectedEmoji) {
+          console.log(`🎨 Art Planner selected emoji: ${config.selectedEmoji}`);
+        }
+
         return {
           type: "art_plan",
           config: config
