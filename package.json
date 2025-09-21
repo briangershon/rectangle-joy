@@ -1,7 +1,7 @@
 {
-  "name": "cascadiajs-ai-hackathon",
+  "name": "rectangle-joy",
   "version": "1.0.0",
-  "description": "Goal is to define minimal primatives and do most of the heavy-lifting generative art via an LLM.",
+  "description": "The delight of creating abstract rectangle art.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

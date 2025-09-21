@@ -1,6 +1,12 @@
-# Rectangle Packing Agent
+# Rectangle Joy
 
-Goal is to define minimal primatives and do most of the heavy-lifting generative art via an LLM.
+The delight of creating abstract rectangle art.
+
+An app where you type an idea and an LLM orchestrates thousands of tightly packed rectangles -- adjusting zones, colors, and densities -- to paint abstract scenes.
+
+![art work of lounging on the beach](lounging-on-the-beach.jpg)
+
+Built at the [Cascadia AI Hackathon 2025](https://luma.com/yu2ccnvr) by [Brian Gershon](https://briangershon.com).
 
 # Development
 
@@ -56,5 +62,3 @@ The "Previous Art" panel now talks to a tiny Express backend that relays request
    ```
 
    The UI will automatically load previous runs and persist new ones through the backend.
-
-> ⚠️ Since the API endpoint can be called from the browser, ensure the Neon role you use here only has access to the `art_history` table.

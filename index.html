@@ -206,30 +206,27 @@
       </header>
       <canvas id="rectCanvas"></canvas>
       <div class="about">
-        <h2>Rectangular Art Planner</h2>
+        <h2>Rectangle Joy</h2>
         <div class="author">by Brian Gershon</div>
         <div class="links">
-          <a href="https://briangershon.com" target="_blank"
-            >briangershon.com</a
-          >
-          <a href="https://github.com/placeholder/repo" target="_blank"
-            >GitHub</a
+          <a
+            href="https://github.com/briangershon/rectangle-joy"
+            target="_blank"
+            >github.com/briangershon/rectangle-joy</a
           >
         </div>
-        <div class="subtitle">CascadiaJS AI Hackathon 2025</div>
+        <div class="subtitle">Calming abstract scenes composed by an LLM</div>
         <div class="approach">
-          This project explores generative art through AI-assisted rectangle
-          packing algorithms. By defining minimal primitives and leveraging
-          language models for creative direction, it demonstrates how natural
-          language can guide algorithmic art creation. Built using OpenAI
-          models, Codex, and Claude Code, the approach combines mathematical
-          constraints with artistic interpretation to generate unique visual
-          compositions from simple textual descriptions.
+          Type a prompt and watch an LLM provided by OpenAI conduct thousands of
+          rectangles into a meditative composition. The project blends
+          lightweight math, WebGL shaders, and an Express bridge backed by Neon
+          serverless Postgres to store each generated canvas for later replay.
         </div>
       </div>
     </div>
 
     <script src="config.js"></script>
+    <script src="historyClient.js" defer></script>
     <script src="shaders.js" defer></script>
     <script src="llm.js" defer></script>
     <script src="rects.js" defer></script>
