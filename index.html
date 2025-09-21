@@ -285,19 +285,37 @@
           blue rectangles
         </h1>
         <span class="status" id="status">—</span>
-        <button class="menu-button" id="menuButton" aria-label="Open previous art" aria-haspopup="dialog"
-          aria-controls="historyModal" aria-expanded="false">
+        <button
+          class="menu-button"
+          id="menuButton"
+          aria-label="Open saved art"
+          aria-haspopup="dialog"
+          aria-controls="historyModal"
+          aria-expanded="false"
+        >
           ☰
         </button>
       </header>
       <canvas id="rectCanvas"></canvas>
-      <div class="modal" id="historyModal" role="dialog" aria-modal="true"
-        aria-labelledby="historyTitle" hidden>
+      <div
+        class="modal"
+        id="historyModal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="historyTitle"
+        hidden
+      >
         <div class="modal-overlay" id="modalOverlay"></div>
         <div class="modal-content">
           <header class="modal-header">
-            <h2 id="historyTitle">Previous Art</h2>
-            <button class="modal-close" id="modalClose" aria-label="Close history">✕</button>
+            <h2 id="historyTitle">Your Saved Art</h2>
+            <button
+              class="modal-close"
+              id="modalClose"
+              aria-label="Close history"
+            >
+              ✕
+            </button>
           </header>
           <div class="modal-body">
             <ul id="historyList" class="history-list"></ul>
