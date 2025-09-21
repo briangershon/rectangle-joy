@@ -234,6 +234,10 @@
   function runWithConfig(config, sourceLabel = "defaults") {
     resizeCanvasToDisplaySize();
     const safeConfig = sanitizeConfig(config);
+    console.log("Rectangle tool payload", {
+      source: sourceLabel,
+      config: safeConfig,
+    });
     activeConfig = safeConfig;
     activeSourceLabel = sourceLabel;
     const rects = generateRectangles(

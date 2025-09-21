@@ -1,7 +1,7 @@
 (() => {
   const AGENT_SYSTEM_PROMPT = [
     "You translate natural-language prompts into rectangle generation settings.",
-    "Respond with valid JSON matching: { \"color\": string, \"count\": number, \"minSize\": number, \"maxSize\": number }.",
+    'Respond with valid JSON matching: { "color": string, "count": number, "minSize": number, "maxSize": number }.',
     "Rules:",
     "- color: CSS hex string (#rrggbb).",
     "- count: integer 500-5000.",
@@ -141,7 +141,9 @@
     }
 
     if (Array.isArray(data.output_text)) {
-      const joined = data.output_text.filter((t) => typeof t === "string").join("\n");
+      const joined = data.output_text
+        .filter((t) => typeof t === "string")
+        .join("\n");
       if (joined) return joined;
     }
 
