@@ -11,9 +11,17 @@ serverless Postgres to store each generated canvas for later replay.
 
 Built at the [Cascadia AI Hackathon 2025](https://luma.com/yu2ccnvr) by [Brian Gershon](https://briangershon.com).
 
+# Hackathon Project
+
+This is a hackathon project so please don't host this publicly since it will expose your OpenAI key. The LLM logic needs to move to the backend to run on the open internet.
+
 # Development
 
-No build process. Serve via a static file server such as node-based `http-server`.
+There's no build process, so you just need to run the backend and then serve the frontend files.
+
+- Configure .env and config.js as described below. See warning above about `config.js` not being a secure way to store secrets. Just run this locally.
+- Run the server via `npm start` to support persistence via Neon.
+- Use a static HTTP server such as Node-based `http-server` to load index.html
 
 ## OpenAI Configuration
 
