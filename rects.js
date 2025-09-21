@@ -11,7 +11,14 @@
   const MAX_ATTEMPTS_PER_RECT = 500; // placement retries per rectangle before giving up on that rect
 
   const canvas = document.getElementById("rectCanvas");
-  const ctx = canvas.getContext("2d");
+
+  // Create a hidden 2D canvas for rectangle rendering
+  const sourceCanvas = document.createElement("canvas");
+  const sourceCtx = sourceCanvas.getContext("2d");
+
+  // Initialize shader system - will use WebGL on main canvas
+  let frameGlassShader = null;
+  let ctx = null; // Will be set based on whether WebGL is available
 
   const statusEl = document.getElementById("status");
   const promptInput = document.getElementById("prompt");
@@ -37,8 +44,42 @@
     if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
       canvas.width = displayWidth;
       canvas.height = displayHeight;
+
+      // Also resize the source canvas
+      sourceCanvas.width = displayWidth;
+      sourceCanvas.height = displayHeight;
+      sourceCtx.setTransform(dpr, 0, 0, dpr, 0, 0); // draw in CSS pixels
+
+      // Resize shader system if it exists
+      if (frameGlassShader) {
+        frameGlassShader.resize(displayWidth, displayHeight);
+      }
     }
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // draw in CSS pixels
+    if (ctx) {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // draw in CSS pixels
+    }
+  }
+
+  // Initialize shader system
+  function initShaderSystem() {
+    try {
+      if (typeof window.FrameGlassShader !== 'undefined') {
+        frameGlassShader = new window.FrameGlassShader(canvas);
+        console.log('Frame and glass shader system initialized successfully');
+
+        // Set some nice default values for the effects
+        frameGlassShader.setFrameWidth(0.08); // 8% frame width
+        frameGlassShader.setGlassIntensity(0.8); // Subtle glass effect
+      } else {
+        console.warn('FrameGlassShader not available - falling back to standard rendering');
+        ctx = canvas.getContext("2d");
+      }
+    } catch (error) {
+      console.warn('Failed to initialize shader system:', error.message);
+      console.warn('Falling back to standard 2D rendering');
+      frameGlassShader = null;
+      ctx = canvas.getContext("2d");
+    }
   }
 
   // Geometry helpers
@@ -206,8 +247,13 @@
   }
 
   function draw(rects, color, colorZones = []) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Clear both canvases
+    sourceCtx.clearRect(0, 0, sourceCanvas.width, sourceCanvas.height);
+    if (ctx) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
 
+    // Draw to source canvas first
     // Draw color zones first (as semi-transparent guides)
     if (colorZones.length > 0) {
       console.log(
@@ -220,7 +266,7 @@
         ":",
         colorZones
       );
-      ctx.globalAlpha = 0.4; // Much more visible for debugging
+      sourceCtx.globalAlpha = 0.4; // Much more visible for debugging
       for (const zone of colorZones) {
         // Test: Use zone coordinates directly (assuming they're already in CSS pixels)
         const dpr = window.devicePixelRatio || 1;
@@ -260,24 +306,32 @@
         );
 
         // Use direct coordinates (assume AI gives CSS pixel values)
-        ctx.fillStyle = zone.color;
+        sourceCtx.fillStyle = zone.color;
 
         if (zone.type === "circle") {
-          ctx.beginPath();
-          ctx.arc(zoneXDirect, zoneYDirect, zoneRadiusDirect, 0, 2 * Math.PI);
-          ctx.fill();
+          sourceCtx.beginPath();
+          sourceCtx.arc(zoneXDirect, zoneYDirect, zoneRadiusDirect, 0, 2 * Math.PI);
+          sourceCtx.fill();
         } else if (zone.type === "rectangle") {
-          ctx.fillRect(zone.x, zone.y, zone.width, zone.height);
+          sourceCtx.fillRect(zone.x, zone.y, zone.width, zone.height);
         }
       }
-      ctx.globalAlpha = 1.0;
+      sourceCtx.globalAlpha = 1.0;
     }
 
-    // Draw rectangles with zone-based coloring
+    // Draw rectangles with zone-based coloring to source canvas
     for (const r of rects) {
       const effectiveColor = getEffectiveColor(r, colorZones, color);
-      ctx.fillStyle = effectiveColor;
-      ctx.fillRect(r.x, r.y, r.w, r.h);
+      sourceCtx.fillStyle = effectiveColor;
+      sourceCtx.fillRect(r.x, r.y, r.w, r.h);
+    }
+
+    // Apply shader effects if available, otherwise copy directly
+    if (frameGlassShader) {
+      frameGlassShader.render(sourceCanvas);
+    } else if (ctx) {
+      // Fallback: draw source canvas directly to display canvas
+      ctx.drawImage(sourceCanvas, 0, 0);
     }
   }
 
@@ -527,6 +581,9 @@
     });
   }
   window.addEventListener("resize", redrawActiveConfig);
+
+  // Initialize shader system after DOM is ready
+  initShaderSystem();
 
   // Initial draw
   runWithConfig(DEFAULT_CONFIG, "defaults");
