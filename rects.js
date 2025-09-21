@@ -24,10 +24,13 @@
   const promptInput = document.getElementById("prompt");
   const historyListEl = document.getElementById("historyList");
 
-  const HISTORY_STORAGE_KEY = "rectangleArtHistory";
   const HISTORY_LIMIT = 10;
 
   let artHistory = [];
+  let historyEndpointBase = "";
+  let historyLoading = false;
+  let historyLoadError = null;
+  let historyEnabled = true;
 
   const DEFAULT_CONFIG = Object.freeze({
     color: "#1f77b4",
@@ -612,7 +615,7 @@
       }
 
       if (renderOutcome) {
-        persistPromptResult(promptText, result.type, renderOutcome);
+        await persistPromptResult(promptText, result.type, renderOutcome);
       }
     } catch (error) {
       console.error(error);
@@ -700,60 +703,67 @@
   // Initialize shader system after DOM is ready
   initShaderSystem();
 
-  function loadArtHistory() {
-    if (typeof window === "undefined" || !window.localStorage) {
-      return [];
+  function resolveHistoryApiBase() {
+    if (typeof window === "undefined") return "";
+    const configured = (window.HISTORY_API_BASE || "").trim();
+    if (configured) {
+      return configured.replace(/\/$/, "");
     }
-    try {
-      const raw = window.localStorage.getItem(HISTORY_STORAGE_KEY);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return [];
-      return parsed
-        .map((entry) => sanitizeHistoryEntry(entry))
-        .filter(Boolean)
-        .slice(0, HISTORY_LIMIT);
-    } catch (error) {
-      console.warn("Failed to load art history", error);
-      return [];
+    if (
+      window.location &&
+      typeof window.location.origin === "string" &&
+      window.location.origin !== "null"
+    ) {
+      return window.location.origin.replace(/\/$/, "");
     }
+    return "";
+  }
+
+  function historyApiUrl(path) {
+    if (!path.startsWith("/")) {
+      throw new Error(`History API path must start with '/': ${path}`);
+    }
+    if (!historyEndpointBase) return path;
+    return `${historyEndpointBase}${path}`;
+  }
+
+  function buildHistoryPayload(prompt, resultType, renderDetails) {
+    return {
+      prompt: prompt || "",
+      resultType: resultType || "unknown",
+      config: {
+        ...renderDetails.config,
+        colorZones: cloneColorZones(renderDetails.config?.colorZones),
+      },
+      rectangles: sanitizeRectangles(renderDetails.rects),
+      canvasWidth: Math.round(Number(renderDetails.canvasWidth) || 0),
+      canvasHeight: Math.round(Number(renderDetails.canvasHeight) || 0),
+    };
   }
 
   function sanitizeHistoryEntry(entry) {
     if (!entry || typeof entry !== "object") return null;
-    const prompt = typeof entry.prompt === "string" ? entry.prompt : "";
-    const resultType = typeof entry.resultType === "string" ? entry.resultType : "unknown";
-    const createdAt = Number(entry.createdAt);
     const id = typeof entry.id === "string" ? entry.id : null;
-    if (!id || !Number.isFinite(createdAt)) return null;
+    if (!id) return null;
 
-    const config = sanitizeConfig(entry.config || {});
-    config.colorZones = cloneColorZones(entry.config?.colorZones || config.colorZones);
+    const createdAtMs = entry.createdAt ? new Date(entry.createdAt).getTime() : Date.now();
 
-    const rectangles = sanitizeRectangles(entry.rectangles);
+    const sanitizedConfig = sanitizeConfig({
+      ...(entry.config || {}),
+      colorZones: entry.config?.colorZones || [],
+    });
+    sanitizedConfig.colorZones = cloneColorZones(entry.config?.colorZones || sanitizedConfig.colorZones);
 
     return {
       id,
-      prompt,
-      resultType,
-      createdAt,
-      config,
-      rectangles,
+      prompt: typeof entry.prompt === "string" ? entry.prompt : "",
+      resultType: typeof entry.resultType === "string" ? entry.resultType : "unknown",
+      createdAt: Number.isFinite(createdAtMs) ? createdAtMs : Date.now(),
+      config: sanitizedConfig,
+      rectangles: sanitizeRectangles(entry.rectangles),
       canvasWidth: Number(entry.canvasWidth) || 0,
       canvasHeight: Number(entry.canvasHeight) || 0,
     };
-  }
-
-  function saveArtHistory(entries) {
-    if (typeof window === "undefined" || !window.localStorage) {
-      return;
-    }
-    try {
-      const payload = JSON.stringify(entries.slice(0, HISTORY_LIMIT));
-      window.localStorage.setItem(HISTORY_STORAGE_KEY, payload);
-    } catch (error) {
-      console.warn("Failed to save art history", error);
-    }
   }
 
   function formatHistoryTimestamp(timestamp) {
@@ -764,14 +774,64 @@
     }
   }
 
+  async function fetchHistoryFromServer() {
+    const response = await fetch(historyApiUrl("/api/history"), {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    });
+
+    if (!response.ok) {
+      throw new Error(`History request failed with status ${response.status}`);
+    }
+
+    const data = await response.json();
+    const items = Array.isArray(data?.items) ? data.items : [];
+    return items.map((item) => sanitizeHistoryEntry(item)).filter(Boolean);
+  }
+
+  async function persistHistoryToServer(payload) {
+    const response = await fetch(historyApiUrl("/api/history"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      const message = text || response.statusText || "Failed to save history.";
+      throw new Error(message);
+    }
+
+    const data = await response.json();
+    return sanitizeHistoryEntry(data?.item);
+  }
+
   function updateHistoryUI() {
     if (!historyListEl) return;
     historyListEl.innerHTML = "";
 
-    if (!artHistory.length) {
+    if (!historyEnabled) {
+      const disabledItem = document.createElement("li");
+      disabledItem.className = "history-empty";
+      disabledItem.textContent = "History server not configured.";
+      historyListEl.appendChild(disabledItem);
+      return;
+    }
+
+    let message = "";
+
+    if (historyLoading) {
+      message = "Loading history...";
+    } else if (historyLoadError) {
+      message = historyLoadError;
+    } else if (!artHistory.length) {
+      message = "No saved art yet.";
+    }
+
+    if (message) {
       const emptyItem = document.createElement("li");
       emptyItem.className = "history-empty";
-      emptyItem.textContent = "No saved art yet.";
+      emptyItem.textContent = message;
       historyListEl.appendChild(emptyItem);
       return;
     }
@@ -782,7 +842,9 @@
       item.className = "history-item";
 
       const label = document.createElement("span");
-      label.textContent = `${entry.prompt || "(untitled)"} • ${formatHistoryTimestamp(entry.createdAt)}`;
+      label.textContent = `${entry.prompt || "(untitled)"} • ${
+        formatHistoryTimestamp(entry.createdAt)
+      }`;
 
       const button = document.createElement("button");
       button.type = "button";
@@ -797,10 +859,6 @@
     }
 
     historyListEl.appendChild(fragment);
-  }
-
-  function generateHistoryId(timestamp) {
-    return `${timestamp}-${Math.random().toString(36).slice(2, 8)}`;
   }
 
   function loadHistoryEntry(entryId) {
@@ -818,47 +876,63 @@
     setStatusMessage(`Loaded saved art from prompt: "${entry.prompt}"`);
   }
 
-  function createHistoryEntry({ prompt, resultType, renderDetails }) {
-    if (!renderDetails || !Array.isArray(renderDetails.rects)) return null;
-    const timestamp = Date.now();
-    const id = generateHistoryId(timestamp);
+  async function persistPromptResult(promptText, resultType, renderDetails) {
+    if (!historyEnabled) return;
+    if (!renderDetails || !Array.isArray(renderDetails.rects)) return;
 
-    return {
-      id,
-      prompt: prompt || "",
-      resultType,
-      createdAt: timestamp,
-      config: {
-        ...renderDetails.config,
-        colorZones: cloneColorZones(renderDetails.config?.colorZones),
-      },
-      rectangles: sanitizeRectangles(renderDetails.rects),
-      canvasWidth: renderDetails.canvasWidth || 0,
-      canvasHeight: renderDetails.canvasHeight || 0,
-    };
-  }
+    const payload = buildHistoryPayload(promptText, resultType, renderDetails);
 
-  function addHistoryEntry(entry) {
-    if (!entry) return;
-    artHistory.unshift(entry);
-    if (artHistory.length > HISTORY_LIMIT) {
-      artHistory = artHistory.slice(0, HISTORY_LIMIT);
+    try {
+      const savedEntry = await persistHistoryToServer(payload);
+      if (!savedEntry) return;
+
+      historyLoadError = null;
+      artHistory.unshift(savedEntry);
+      if (artHistory.length > HISTORY_LIMIT) {
+        artHistory = artHistory.slice(0, HISTORY_LIMIT);
+      }
+      updateHistoryUI();
+    } catch (error) {
+      console.warn("Failed to save history", error);
+      historyLoadError = "Unable to save history right now.";
+      updateHistoryUI();
     }
-    saveArtHistory(artHistory);
+  }
+
+  async function initializeHistory() {
+    historyEndpointBase = resolveHistoryApiBase();
+
+    if (
+      !historyEndpointBase &&
+      (typeof window === "undefined" || !window.location || window.location.origin === "null")
+    ) {
+      historyEnabled = false;
+      historyLoading = false;
+      historyLoadError = null;
+      updateHistoryUI();
+      return;
+    }
+
+    historyEnabled = true;
+    historyLoading = true;
+    historyLoadError = null;
     updateHistoryUI();
+
+    try {
+      const items = await fetchHistoryFromServer();
+      artHistory = items;
+      historyLoadError = null;
+    } catch (error) {
+      console.warn("Failed to fetch history", error);
+      historyLoadError =
+        error && typeof error.message === "string" ? error.message : "Failed to load history.";
+    } finally {
+      historyLoading = false;
+      updateHistoryUI();
+    }
   }
 
-  function persistPromptResult(promptText, resultType, renderDetails) {
-    const entry = createHistoryEntry({
-      prompt: promptText,
-      resultType,
-      renderDetails,
-    });
-    addHistoryEntry(entry);
-  }
-
-  artHistory = loadArtHistory();
-  updateHistoryUI();
+  initializeHistory();
 
   // Initial draw
   runWithConfig(DEFAULT_CONFIG, "defaults");
