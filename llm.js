@@ -12,27 +12,29 @@
 
   const ART_PLANNER_SYSTEM_PROMPT = [
     "You are a Simple Concept-to-Art Planner. Translate user prompts into basic geometric shapes using color zones.",
-    'Respond with valid JSON matching: { "colorZones": [{"x": number, "y": number, "radius": number, "color": string}], "rectangles": {"color": string, "count": number, "minSize": number, "maxSize": number} }.',
+    'Respond with valid JSON matching: { "colorZones": [{"type": "circle|rectangle", "x": number, "y": number, "radius"?: number, "width"?: number, "height"?: number, "color": string}], "rectangles": {"color": string, "count": number, "minSize": number, "maxSize": number} }.',
     "Process:",
     "1. Identify the core concept in the prompt",
-    "2. Map it to simple geometric shapes with sufficient color zones for clarity",
+    "2. Choose appropriate zone types: circles for organic shapes (eyes, sun, flowers), rectangles for structured elements (buildings, screens, frames)",
     "3. Create multiple overlapping zones to ensure the shape is clearly visible",
     "Rules:",
-    "- colorZones: Array of circular zones. x,y coordinates in pixels (0 to canvas size), radius in pixels.",
+    "- colorZones: Array of circular or rectangular zones. For circles: x,y=center, radius. For rectangles: x,y=top-left corner, width, height.",
     "- rectangles.color: Default CSS hex string for background rectangles.",
     "- rectangles.count: integer 1000-5000.",
     "- rectangles.minSize: integer 10-30, rectangles.maxSize: integer 20-50.",
-    "- Use 12-16 zones per concept for clear definition.",
-    "- Zone radii should be 15-30% of canvas width for visibility.",
-    "- Use overlapping zones where needed for complex shapes.",
+    "- Use 8-16 zones per concept for clear definition.",
+    "- Zone sizes should be 15-30% of canvas width for visibility.",
+    "- Combine circle and rectangle zones strategically for best representation.",
     "Concept Mappings:",
-    "- 'forest/tree': Brown trunk zone at (50%W,75%H) radius=8%W + 3-4 overlapping green leaf zones at (50%W,35%H) radius=25%W",
-    "- 'happy face/smile': 2 black eye zones at (35%W,40%H) and (65%W,40%H) radius=8%W + 1 red smile zone at (50%W,65%H) radius=15%W",
-    "- 'sad face': 2 black eye zones at (35%W,40%H) and (65%W,40%H) radius=8%W + 1 blue frown zone at (50%W,70%H) radius=12%W",
-    "- 'sun': 1 large yellow central zone at (50%W,50%H) radius=25%W + 6 smaller yellow ray zones around perimeter radius=8%W",
-    "- 'house': Brown base zone at (50%W,65%H) radius=20%W + red roof zone at (50%W,35%H) radius=18%W + yellow window zones",
-    "- 'car': Blue body zone at (50%W,55%H) radius=25%W + 2 black wheel zones at (30%W,75%H) and (70%W,75%H) radius=8%W",
-    "- Use contrasting colors against light yellow background: black (#000000), red (#ff0000), blue (#0000ff), green (#00ff00), brown (#8B4513).",
+    "- 'tree': Brown rectangular trunk at (45%W,60%H) size=10%W×30%H + 3-4 overlapping green circular leaf zones at (50%W,35%H) radius=25%W",
+    "- 'house': Brown rectangular base at (25%W,50%H) size=50%W×30%H + red triangular roof (use rectangle at 45°) + yellow rectangular windows",
+    "- 'building/skyscraper': Large gray rectangular base + smaller rectangular windows in grid pattern",
+    "- 'happy face': 2 black circular eye zones at (35%W,40%H) and (65%W,40%H) radius=8%W + 1 red circular smile zone at (50%W,65%H) radius=15%W",
+    "- 'traffic light': Black rectangular frame at (45%W,30%H) size=10%W×30%H + 3 circular lights (red, yellow, green) vertically stacked inside",
+    "- 'computer/screen': Dark rectangular frame + lighter rectangular screen area inside",
+    "- 'sun': 1 large yellow circular zone at (50%W,50%H) radius=25%W + 8 smaller yellow rectangular ray zones extending outward",
+    "- 'car': Blue rectangular body zone at (25%W,55%H) size=50%W×15%H + 2 black circular wheel zones at (30%W,75%H) and (70%W,75%H) radius=8%W",
+    "- Use contrasting colors against light yellow background: black (#000000), red (#ff0000), blue (#0000ff), green (#00ff00), brown (#8B4513), gray (#808080).",
     "- CANVAS_SIZE_PLACEHOLDER",
   ].join(" ");
 
@@ -89,24 +91,40 @@
           items: {
             type: "object",
             properties: {
+              type: {
+                type: "string",
+                enum: ["circle", "rectangle"],
+                description: "Type of zone - circle or rectangle",
+              },
               x: {
                 type: "number",
                 minimum: 0,
                 maximum: 6000,
-                description: "X coordinate in pixels",
+                description: "X coordinate in pixels (center for circles, top-left for rectangles)",
               },
               y: {
                 type: "number",
                 minimum: 0,
                 maximum: 6000,
-                description: "Y coordinate in pixels",
+                description: "Y coordinate in pixels (center for circles, top-left for rectangles)",
               },
               radius: {
                 type: "number",
                 minimum: 50,
                 maximum: 3000,
-                description:
-                  "Zone radius in pixels - scale proportionally to canvas size, use 15-30% of canvas width for visibility",
+                description: "Zone radius in pixels (for circular zones only) - scale proportionally to canvas size, use 15-30% of canvas width for visibility",
+              },
+              width: {
+                type: "number",
+                minimum: 50,
+                maximum: 6000,
+                description: "Zone width in pixels (for rectangular zones only)",
+              },
+              height: {
+                type: "number",
+                minimum: 50,
+                maximum: 6000,
+                description: "Zone height in pixels (for rectangular zones only)",
               },
               color: {
                 type: "string",
@@ -114,11 +132,11 @@
                 description: "CSS hex color for this zone",
               },
             },
-            required: ["x", "y", "radius", "color"],
+            required: ["type", "x", "y", "color"],
             additionalProperties: false,
           },
           description:
-            "Array of circular color zones for creating patterns (use 4-8 zones for clear definition)",
+            "Array of color zones (circular or rectangular) for creating patterns. Choose zone type based on the concept: circles for organic shapes (eyes, sun), rectangles for structured elements (buildings, screens)",
         },
         rectangles: {
           type: "object",
@@ -208,6 +226,10 @@
           type: "object",
           additionalProperties: false,
           properties: {
+            type: {
+              type: "string",
+              enum: ["circle", "rectangle"],
+            },
             x: {
               type: "number",
               minimum: 0,
@@ -222,15 +244,26 @@
               type: "number",
               minimum: 20,
               maximum: 1500,
-              description:
-                "Zone radius in pixels - scale proportionally to canvas size",
+              description: "Zone radius in pixels (for circular zones only)",
+            },
+            width: {
+              type: "number",
+              minimum: 20,
+              maximum: 2000,
+              description: "Zone width in pixels (for rectangular zones only)",
+            },
+            height: {
+              type: "number",
+              minimum: 20,
+              maximum: 2000,
+              description: "Zone height in pixels (for rectangular zones only)",
             },
             color: {
               type: "string",
               pattern: "^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{3})$",
             },
           },
-          required: ["x", "y", "radius", "color"],
+          required: ["type", "x", "y", "color"],
         },
       },
       rectangles: {

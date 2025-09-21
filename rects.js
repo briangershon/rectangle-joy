@@ -108,12 +108,24 @@
     const rectCenterY = rect.y + rect.h / 2;
 
     for (const zone of zones) {
-      const distanceToZoneCenter = Math.hypot(
-        rectCenterX - zone.x,
-        rectCenterY - zone.y
-      );
-      if (distanceToZoneCenter <= zone.radius) {
-        return zone.color; // First matching zone wins
+      if (zone.type === "circle") {
+        const distanceToZoneCenter = Math.hypot(
+          rectCenterX - zone.x,
+          rectCenterY - zone.y
+        );
+        if (distanceToZoneCenter <= zone.radius) {
+          return zone.color; // First matching zone wins
+        }
+      } else if (zone.type === "rectangle") {
+        // Check if rectangle center is inside the rectangular zone
+        if (
+          rectCenterX >= zone.x &&
+          rectCenterX <= zone.x + zone.width &&
+          rectCenterY >= zone.y &&
+          rectCenterY <= zone.y + zone.height
+        ) {
+          return zone.color; // First matching zone wins
+        }
       }
     }
 
@@ -259,9 +271,14 @@
 
         // Use direct coordinates (assume AI gives CSS pixel values)
         ctx.fillStyle = zone.color;
-        ctx.beginPath();
-        ctx.arc(zoneXDirect, zoneYDirect, zoneRadiusDirect, 0, 2 * Math.PI);
-        ctx.fill();
+
+        if (zone.type === "circle") {
+          ctx.beginPath();
+          ctx.arc(zoneXDirect, zoneYDirect, zoneRadiusDirect, 0, 2 * Math.PI);
+          ctx.fill();
+        } else if (zone.type === "rectangle") {
+          ctx.fillRect(zone.x, zone.y, zone.width, zone.height);
+        }
       }
       ctx.globalAlpha = 1.0;
     }
@@ -310,18 +327,43 @@
 
     return zones
       .filter((zone) => zone && typeof zone === "object")
-      .map((zone) => ({
-        x: Number(zone.x) || 0,
-        y: Number(zone.y) || 0,
-        radius: Math.max(1, Number(zone.radius) || 50),
-        color: parseColor(zone.color),
-      }))
-      .filter(
-        (zone) =>
-          Number.isFinite(zone.x) &&
-          Number.isFinite(zone.y) &&
-          Number.isFinite(zone.radius)
-      );
+      .map((zone) => {
+        const baseZone = {
+          type: zone.type || "circle", // Default to circle for backward compatibility
+          x: Number(zone.x) || 0,
+          y: Number(zone.y) || 0,
+          color: parseColor(zone.color),
+        };
+
+        if (baseZone.type === "circle") {
+          return {
+            ...baseZone,
+            radius: Math.max(1, Number(zone.radius) || 50),
+          };
+        } else if (baseZone.type === "rectangle") {
+          return {
+            ...baseZone,
+            width: Math.max(1, Number(zone.width) || 100),
+            height: Math.max(1, Number(zone.height) || 100),
+          };
+        }
+
+        // Invalid type, default to circle
+        return {
+          ...baseZone,
+          type: "circle",
+          radius: Math.max(1, Number(zone.radius) || 50),
+        };
+      })
+      .filter((zone) => {
+        const baseValid = Number.isFinite(zone.x) && Number.isFinite(zone.y);
+        if (zone.type === "circle") {
+          return baseValid && Number.isFinite(zone.radius);
+        } else if (zone.type === "rectangle") {
+          return baseValid && Number.isFinite(zone.width) && Number.isFinite(zone.height);
+        }
+        return false;
+      });
   }
 
   function clampNumber(value, min, max, fallback) {
