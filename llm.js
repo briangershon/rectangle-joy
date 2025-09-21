@@ -11,28 +11,28 @@
   ].join(" ");
 
   const ART_PLANNER_SYSTEM_PROMPT = [
-    "You are an Emoji-Guided Rectangle Art Planner. For each prompt, first identify the most relevant emoji, then use its visual structure to create color zones.",
-    'Respond with valid JSON matching: { "selectedEmoji": string, "colorZones": [{"x": number, "y": number, "radius": number, "color": string}], "rectangles": {"color": string, "count": number, "minSize": number, "maxSize": number} }.',
-    "Emoji-Guided Process:",
-    "1. Identify the best emoji that matches the prompt (e.g., 'happy face' → 😊, 'two eyes' → 👀, 'heart' → ❤️)",
-    "2. Analyze the emoji's visual structure (position of features, colors, proportions)",
-    "3. Create appropriately-sized color zones that replicate the emoji's layout on the canvas",
+    "You are a Simple Concept-to-Art Planner. Translate user prompts into basic geometric shapes using color zones.",
+    'Respond with valid JSON matching: { "colorZones": [{"x": number, "y": number, "radius": number, "color": string}], "rectangles": {"color": string, "count": number, "minSize": number, "maxSize": number} }.',
+    "Process:",
+    "1. Identify the core concept in the prompt",
+    "2. Map it to simple geometric shapes with sufficient color zones for clarity",
+    "3. Create multiple overlapping zones to ensure the shape is clearly visible",
     "Rules:",
-    "- selectedEmoji: The actual emoji character you identified (e.g., '😊', '👀', '❤️'). Include exactly the emoji character you chose from the mappings below.",
     "- colorZones: Array of circular zones. x,y coordinates in pixels (0 to canvas size), radius in pixels.",
     "- rectangles.color: Default CSS hex string for background rectangles.",
     "- rectangles.count: integer 1000-5000.",
     "- rectangles.minSize: integer 10-30, rectangles.maxSize: integer 20-50.",
-    "- Zone radii should be proportional to the object being created (5-25% of canvas width for most features, larger for dominant elements).",
-    "- Use emoji proportions: Face features typically at 25% and 75% horizontally for eyes.",
-    "Emoji Mappings:",
-    "- 'happy face/smile' → 😊: 2 black eye zones at (25%W,35%H) and (75%W,35%H), 1 red mouth zone at (50%W,65%H), each radius=20%W",
-    "- 'two eyes' → 👀: 2 black zones at (20%W,50%H) and (80%W,50%H), radius=40%W for full-width span",
-    "- 'angry face' → 😠: 2 red angled eye zones at (25%W,30%H) and (75%W,30%H), 1 black mouth at (50%W,70%H)",
-    "- 'heart' → ❤️: 1 large red zone at (50%W,50%H), radius=35%W",
-    "- 'sun' → ☀️: 1 yellow central zone at (50%W,50%H), radius=30%W",
-    "- 'traffic light' → 🚦: 3 vertically stacked zones: red at (50%W,25%H), yellow at (50%W,50%H), green at (50%W,75%H), each radius=8-12%W",
-    "- Use contrasting colors against light yellow background (#ffff00): black (#000000), red (#ff0000), blue (#0000ff), white (#ffffff).",
+    "- Use 12-16 zones per concept for clear definition.",
+    "- Zone radii should be 15-30% of canvas width for visibility.",
+    "- Use overlapping zones where needed for complex shapes.",
+    "Concept Mappings:",
+    "- 'forest/tree': Brown trunk zone at (50%W,75%H) radius=8%W + 3-4 overlapping green leaf zones at (50%W,35%H) radius=25%W",
+    "- 'happy face/smile': 2 black eye zones at (35%W,40%H) and (65%W,40%H) radius=8%W + 1 red smile zone at (50%W,65%H) radius=15%W",
+    "- 'sad face': 2 black eye zones at (35%W,40%H) and (65%W,40%H) radius=8%W + 1 blue frown zone at (50%W,70%H) radius=12%W",
+    "- 'sun': 1 large yellow central zone at (50%W,50%H) radius=25%W + 6 smaller yellow ray zones around perimeter radius=8%W",
+    "- 'house': Brown base zone at (50%W,65%H) radius=20%W + red roof zone at (50%W,35%H) radius=18%W + yellow window zones",
+    "- 'car': Blue body zone at (50%W,55%H) radius=25%W + 2 black wheel zones at (30%W,75%H) and (70%W,75%H) radius=8%W",
+    "- Use contrasting colors against light yellow background: black (#000000), red (#ff0000), blue (#0000ff), green (#00ff00), brown (#8B4513).",
     "- CANVAS_SIZE_PLACEHOLDER",
   ].join(" ");
 
@@ -42,50 +42,48 @@
   const RECTANGLE_TOOL = {
     type: "function",
     name: "render_rectangles",
-    description: "Generate basic rectangles with specified color, count, and size parameters",
+    description:
+      "Generate basic rectangles with specified color, count, and size parameters",
     parameters: {
       type: "object",
       properties: {
         color: {
           type: "string",
           pattern: "^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{3})$",
-          description: "CSS hex color string (#rrggbb)"
+          description: "CSS hex color string (#rrggbb)",
         },
         count: {
           type: "integer",
           minimum: 500,
           maximum: 5000,
-          description: "Number of rectangles to generate"
+          description: "Number of rectangles to generate",
         },
         minSize: {
           type: "integer",
           minimum: 5,
           maximum: 30,
-          description: "Minimum rectangle size in pixels"
+          description: "Minimum rectangle size in pixels",
         },
         maxSize: {
           type: "integer",
           minimum: 10,
           maximum: 50,
-          description: "Maximum rectangle size in pixels"
-        }
+          description: "Maximum rectangle size in pixels",
+        },
       },
       required: ["color", "count", "minSize", "maxSize"],
-      additionalProperties: false
-    }
+      additionalProperties: false,
+    },
   };
 
   const ART_PLANNER_TOOL = {
     type: "function",
     name: "create_art_plan",
-    description: "Create artistic layouts with color zones and strategic rectangle placement for recognizable patterns, shapes, or artwork",
+    description:
+      "Create artistic layouts with color zones and strategic rectangle placement for recognizable patterns, shapes, or artwork",
     parameters: {
       type: "object",
       properties: {
-        selectedEmoji: {
-          type: "string",
-          description: "The emoji character that was identified and used as the visual guide (e.g., '😊', '👀', '❤️')"
-        },
         colorZones: {
           type: "array",
           items: {
@@ -95,30 +93,32 @@
                 type: "number",
                 minimum: 0,
                 maximum: 6000,
-                description: "X coordinate in pixels"
+                description: "X coordinate in pixels",
               },
               y: {
                 type: "number",
                 minimum: 0,
                 maximum: 6000,
-                description: "Y coordinate in pixels"
+                description: "Y coordinate in pixels",
               },
               radius: {
                 type: "number",
                 minimum: 50,
                 maximum: 3000,
-                description: "Zone radius in pixels - scale proportionally to canvas size, use 20-30% of canvas width for prominent features"
+                description:
+                  "Zone radius in pixels - scale proportionally to canvas size, use 15-30% of canvas width for visibility",
               },
               color: {
                 type: "string",
                 pattern: "^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{3})$",
-                description: "CSS hex color for this zone"
-              }
+                description: "CSS hex color for this zone",
+              },
             },
             required: ["x", "y", "radius", "color"],
-            additionalProperties: false
+            additionalProperties: false,
           },
-          description: "Array of circular color zones for creating patterns"
+          description:
+            "Array of circular color zones for creating patterns (use 4-8 zones for clear definition)",
         },
         rectangles: {
           type: "object",
@@ -126,34 +126,34 @@
             color: {
               type: "string",
               pattern: "^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{3})$",
-              description: "Default color for rectangles outside zones"
+              description: "Default color for rectangles outside zones",
             },
             count: {
               type: "integer",
               minimum: 1000,
               maximum: 5000,
-              description: "Number of rectangles to generate"
+              description: "Number of rectangles to generate",
             },
             minSize: {
               type: "integer",
               minimum: 10,
               maximum: 30,
-              description: "Minimum rectangle size (smaller for detailed art)"
+              description: "Minimum rectangle size (smaller for detailed art)",
             },
             maxSize: {
               type: "integer",
               minimum: 20,
               maximum: 50,
-              description: "Maximum rectangle size"
-            }
+              description: "Maximum rectangle size",
+            },
           },
           required: ["color", "count", "minSize", "maxSize"],
-          additionalProperties: false
-        }
+          additionalProperties: false,
+        },
       },
-      required: ["selectedEmoji", "colorZones", "rectangles"],
-      additionalProperties: false
-    }
+      required: ["colorZones", "rectangles"],
+      additionalProperties: false,
+    },
   };
 
   const ROUTER_SYSTEM_PROMPT = [
@@ -202,10 +202,6 @@
     type: "object",
     additionalProperties: false,
     properties: {
-      selectedEmoji: {
-        type: "string",
-        description: "The emoji character that was identified and used as the visual guide"
-      },
       colorZones: {
         type: "array",
         items: {
@@ -226,7 +222,8 @@
               type: "number",
               minimum: 20,
               maximum: 1500,
-              description: "Zone radius in pixels - scale proportionally to canvas size"
+              description:
+                "Zone radius in pixels - scale proportionally to canvas size",
             },
             color: {
               type: "string",
@@ -263,7 +260,7 @@
         required: ["color", "count", "minSize", "maxSize"],
       },
     },
-    required: ["selectedEmoji", "colorZones", "rectangles"],
+    required: ["colorZones", "rectangles"],
   };
 
   function isApiKeyAvailable() {
@@ -444,7 +441,14 @@
 
   // Main multi-agent router function
   async function processPrompt(userPrompt, canvasWidth, canvasHeight) {
-    console.log("Debug: Starting processPrompt with:", userPrompt, "Canvas:", canvasWidth, "x", canvasHeight);
+    console.log(
+      "Debug: Starting processPrompt with:",
+      userPrompt,
+      "Canvas:",
+      canvasWidth,
+      "x",
+      canvasHeight
+    );
 
     if (!isApiKeyAvailable()) {
       console.log("Debug: API key not available");
@@ -454,7 +458,11 @@
     console.log("Debug: API key available, preparing payload");
 
     // Create dynamic system prompt with actual canvas dimensions
-    const canvasInfo = `Canvas is ${canvasWidth}x${canvasHeight} pixels. Use emoji as visual guide: calculate zone positions as percentages of canvas size. For eyes, use radius = 40-45% of canvas width (${Math.round(canvasWidth * 0.4)}-${Math.round(canvasWidth * 0.45)}px). Scale all emoji features proportionally to canvas size.`;
+    const canvasInfo = `Canvas is ${canvasWidth}x${canvasHeight} pixels. Use emoji as visual guide: calculate zone positions as percentages of canvas size. For eyes, use radius = 40-45% of canvas width (${Math.round(
+      canvasWidth * 0.4
+    )}-${Math.round(
+      canvasWidth * 0.45
+    )}px). Scale all emoji features proportionally to canvas size.`;
 
     // Create combined system prompt that includes both router and art planner instructions
     const dynamicArtPlannerSystemPrompt = ART_PLANNER_SYSTEM_PROMPT.replace(
@@ -462,7 +470,10 @@
       canvasInfo
     );
 
-    const combinedSystemPrompt = ROUTER_SYSTEM_PROMPT + "\n\nWhen using create_art_plan tool:\n" + dynamicArtPlannerSystemPrompt;
+    const combinedSystemPrompt =
+      ROUTER_SYSTEM_PROMPT +
+      "\n\nWhen using create_art_plan tool:\n" +
+      dynamicArtPlannerSystemPrompt;
 
     console.log("Debug: Canvas info for AI:", canvasInfo);
 
@@ -479,27 +490,34 @@
             items: {
               ...ART_PLANNER_TOOL.parameters.properties.colorZones.items,
               properties: {
-                ...ART_PLANNER_TOOL.parameters.properties.colorZones.items.properties,
+                ...ART_PLANNER_TOOL.parameters.properties.colorZones.items
+                  .properties,
                 x: {
-                  ...ART_PLANNER_TOOL.parameters.properties.colorZones.items.properties.x,
+                  ...ART_PLANNER_TOOL.parameters.properties.colorZones.items
+                    .properties.x,
                   maximum: canvasWidth,
-                  description: `X coordinate in pixels (0 to ${canvasWidth})`
+                  description: `X coordinate in pixels (0 to ${canvasWidth})`,
                 },
                 y: {
-                  ...ART_PLANNER_TOOL.parameters.properties.colorZones.items.properties.y,
+                  ...ART_PLANNER_TOOL.parameters.properties.colorZones.items
+                    .properties.y,
                   maximum: canvasHeight,
-                  description: `Y coordinate in pixels (0 to ${canvasHeight})`
+                  description: `Y coordinate in pixels (0 to ${canvasHeight})`,
                 },
                 radius: {
-                  ...ART_PLANNER_TOOL.parameters.properties.colorZones.items.properties.radius,
+                  ...ART_PLANNER_TOOL.parameters.properties.colorZones.items
+                    .properties.radius,
                   maximum: Math.min(canvasWidth, canvasHeight),
-                  description: `Zone radius in pixels (max ${Math.min(canvasWidth, canvasHeight)} for this canvas)`
-                }
-              }
-            }
-          }
-        }
-      }
+                  description: `Zone radius in pixels (max ${Math.min(
+                    canvasWidth,
+                    canvasHeight
+                  )} for this canvas)`,
+                },
+              },
+            },
+          },
+        },
+      },
     };
 
     const payload = {
@@ -527,7 +545,11 @@
         body: JSON.stringify(payload),
       });
 
-      console.log("Debug: Response received, status:", response.status, response.statusText);
+      console.log(
+        "Debug: Response received, status:",
+        response.status,
+        response.statusText
+      );
     } catch (fetchError) {
       console.log("Debug: Fetch error:", fetchError);
       throw new Error(`Network error: ${fetchError.message}`);
@@ -582,42 +604,58 @@
       if (toolName === "render_rectangles") {
         let config;
         try {
-          config = typeof toolArgs === "string" ? JSON.parse(toolArgs) : toolArgs;
+          config =
+            typeof toolArgs === "string" ? JSON.parse(toolArgs) : toolArgs;
         } catch (parseError) {
-          console.log("Debug: JSON parse error for render_rectangles:", parseError);
+          console.log(
+            "Debug: JSON parse error for render_rectangles:",
+            parseError
+          );
           console.log("Debug: Truncated arguments string:", toolArgs);
-          throw new Error(`Failed to parse render_rectangles arguments: ${parseError.message}`);
+          throw new Error(
+            `Failed to parse render_rectangles arguments: ${parseError.message}`
+          );
         }
         return {
           type: "rectangles",
-          config: config
+          config: config,
         };
       } else if (toolName === "create_art_plan") {
         let config;
         try {
-          config = typeof toolArgs === "string" ? JSON.parse(toolArgs) : toolArgs;
+          config =
+            typeof toolArgs === "string" ? JSON.parse(toolArgs) : toolArgs;
         } catch (parseError) {
-          console.log("Debug: JSON parse error for create_art_plan:", parseError);
+          console.log(
+            "Debug: JSON parse error for create_art_plan:",
+            parseError
+          );
           console.log("Debug: Truncated arguments string:", toolArgs);
 
           // Try to reconstruct the JSON if it's truncated
           if (typeof toolArgs === "string" && !toolArgs.endsWith("}")) {
             console.log("Debug: Attempting to fix truncated JSON");
             // For now, throw an error with more details
-            throw new Error(`Truncated JSON arguments detected. Length: ${toolArgs.length}. Content: ${toolArgs}`);
+            throw new Error(
+              `Truncated JSON arguments detected. Length: ${toolArgs.length}. Content: ${toolArgs}`
+            );
           }
 
-          throw new Error(`Failed to parse create_art_plan arguments: ${parseError.message}`);
+          throw new Error(
+            `Failed to parse create_art_plan arguments: ${parseError.message}`
+          );
         }
 
-        // Log the selected emoji
-        if (config.selectedEmoji) {
-          console.log(`🎨 Art Planner selected emoji: ${config.selectedEmoji}`);
-        }
+        // Log that art plan was created
+        console.log(
+          `🎨 Art Planner created concept art with ${
+            config.colorZones?.length || 0
+          } color zones`
+        );
 
         return {
           type: "art_plan",
-          config: config
+          config: config,
         };
       }
     }
@@ -635,12 +673,21 @@
 
     // Handle the Response API format
     if (Array.isArray(data.output)) {
-      console.log("Debug: Found data.output array with", data.output.length, "items");
+      console.log(
+        "Debug: Found data.output array with",
+        data.output.length,
+        "items"
+      );
       const functionCalls = [];
 
       for (const item of data.output) {
         console.log("Debug: Processing output item:", item?.type, item);
-        console.log("Debug: Type check:", item?.type === "function_call", "Name check:", !!item.name);
+        console.log(
+          "Debug: Type check:",
+          item?.type === "function_call",
+          "Name check:",
+          !!item.name
+        );
 
         // Responses API uses "function_call" type directly in output array
         if (item?.type === "function_call" && item.name) {
@@ -654,11 +701,18 @@
 
         // Legacy: check for message format (keeping for backwards compatibility)
         if (item?.type === "message" && Array.isArray(item.content)) {
-          console.log("Debug: Found message with", item.content.length, "content parts");
+          console.log(
+            "Debug: Found message with",
+            item.content.length,
+            "content parts"
+          );
           for (const part of item.content) {
             console.log("Debug: Processing content part:", part?.type, part);
             if (part?.type === "tool_use" && part.tool_calls) {
-              console.log("Debug: Found tool_use with tool_calls:", part.tool_calls);
+              console.log(
+                "Debug: Found tool_use with tool_calls:",
+                part.tool_calls
+              );
               return part.tool_calls;
             }
             // Also check if the part itself is a tool call
@@ -671,7 +725,12 @@
       }
 
       if (functionCalls.length > 0) {
-        console.log("Debug: Returning", functionCalls.length, "function calls:", functionCalls);
+        console.log(
+          "Debug: Returning",
+          functionCalls.length,
+          "function calls:",
+          functionCalls
+        );
         return functionCalls;
       }
     }
@@ -684,7 +743,10 @@
 
     // Check for choices format (standard completion format)
     if (Array.isArray(data.choices) && data.choices[0]?.message?.tool_calls) {
-      console.log("Debug: Found tool_calls in choices format:", data.choices[0].message.tool_calls);
+      console.log(
+        "Debug: Found tool_calls in choices format:",
+        data.choices[0].message.tool_calls
+      );
       return data.choices[0].message.tool_calls;
     }
 

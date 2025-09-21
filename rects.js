@@ -384,10 +384,8 @@
       throw new Error("Invalid art plan structure");
     }
 
-    // Log the selected emoji if available
-    if (artPlan.selectedEmoji) {
-      console.log(`🎯 Executing art plan for emoji: ${artPlan.selectedEmoji}`);
-    }
+    // Log the art plan execution
+    console.log(`🎯 Executing art plan with ${artPlan.colorZones?.length || 0} color zones`);
 
     console.log("Debug: Art plan rectangles config:", artPlan.rectangles);
     console.log("Debug: Art plan color zones:", artPlan.colorZones);
