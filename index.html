@@ -20,21 +20,12 @@
         height: 100%;
       }
       header {
-        padding: 24px 20px;
+        padding: 16px 20px;
         border-bottom: 1px solid #e5e7eb;
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 16px;
-      }
-
-      .title-container {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 20px;
-        width: 100%;
-        max-width: 800px;
+        gap: 12px;
       }
 
       .editable-title {
@@ -52,7 +43,8 @@
         transition: all 0.2s ease;
         min-height: 1.2em;
         word-wrap: break-word;
-        max-width: 100%;
+        max-width: 800px;
+        width: 100%;
       }
 
       .editable-title:hover {
@@ -68,45 +60,6 @@
         content: attr(data-placeholder);
         color: #9ca3af;
         font-style: italic;
-      }
-
-      .generate-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        font: inherit;
-        font-size: 1.1rem;
-        font-weight: 500;
-        padding: 12px 24px;
-        border: none;
-        border-radius: 12px;
-        background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-        color: white;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-      }
-
-      .generate-btn:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
-        background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
-      }
-
-      .generate-btn:active {
-        transform: translateY(0);
-        box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
-      }
-
-      .generate-btn:disabled {
-        background: #9ca3af;
-        cursor: not-allowed;
-        transform: none;
-        box-shadow: none;
-      }
-
-      .generate-btn .icon {
-        font-size: 1.2em;
       }
 
       .status {
@@ -127,18 +80,12 @@
   <body>
     <div id="wrap">
       <header>
-        <div class="title-container">
-          <h1
-            id="prompt"
-            contenteditable="true"
-            class="editable-title"
-            data-placeholder="Describe what you want: simple rectangles (color, count, size) or artistic patterns (happy face, traffic light, etc.)"
-          >2000 blue rectangles between 8 and 16 pixels in size</h1>
-          <button id="runPrompt" class="generate-btn">
-            <span class="icon">✨</span>
-            Generate
-          </button>
-        </div>
+        <h1
+          id="prompt"
+          contenteditable="true"
+          class="editable-title"
+          data-placeholder="Describe what you want: simple rectangles (color, count, size) or artistic patterns (happy face, traffic light, etc.)"
+        >2000 blue rectangles between 8 and 16 pixels in size</h1>
         <span class="status" id="status">—</span>
       </header>
       <canvas id="rectCanvas"></canvas>

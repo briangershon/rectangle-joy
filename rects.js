@@ -15,7 +15,6 @@
 
   const statusEl = document.getElementById("status");
   const promptInput = document.getElementById("prompt");
-  const runPromptBtn = document.getElementById("runPrompt");
 
   const DEFAULT_CONFIG = Object.freeze({
     color: "#1f77b4",
@@ -25,7 +24,6 @@
     colorZones: [], // Array of {x, y, radius, color} objects
   });
 
-  const promptButtonIdleLabel = runPromptBtn ? runPromptBtn.textContent : "";
   let activeConfig = { ...DEFAULT_CONFIG };
   let activeSourceLabel = "defaults";
 
@@ -194,13 +192,6 @@
       if (isValidPlacement(cand, rects, GAP)) {
         rects.push(cand);
       }
-
-      // Log progress every 1000 attempts
-      //   if (attempts % 1000 === 0) {
-      //     console.log(
-      //       `Debug: Rectangle generation progress: ${rects.length}/${targetCount} placed, ${attempts} attempts`
-      //     );
-      //   }
     }
 
     console.log(
@@ -294,10 +285,6 @@
     statusEl.textContent = text;
   }
 
-  function updateStatus(placed, target, sourceLabel) {
-    const detail = sourceLabel ? ` - ${sourceLabel}` : "";
-    setStatusMessage(`Placed ${placed} / ${target} rectangles${detail}`);
-  }
 
   function sanitizeConfig(config) {
     if (!config || typeof config !== "object") {
@@ -402,6 +389,9 @@
     const cssWidth = canvas.width / dpr;
     const cssHeight = canvas.height / dpr;
 
+    // Show placing rectangles message
+    setStatusMessage("Placing rectangles...");
+
     const rects = generateRectangles(
       cssWidth,
       cssHeight,
@@ -410,7 +400,9 @@
       safeConfig.maxSize
     );
     draw(rects, safeConfig.color, safeConfig.colorZones || []);
-    updateStatus(rects.length, safeConfig.count, sourceLabel);
+
+    // Show final result
+    setStatusMessage(`Placed ${rects.length}/${safeConfig.count} rectangles`);
   }
 
   function runWithArtPlan(artPlan, sourceLabel = "art plan") {
@@ -440,16 +432,6 @@
     runWithConfig(combinedConfig, sourceLabel);
   }
 
-  function setPromptBusy(isBusy) {
-    if (runPromptBtn) {
-      runPromptBtn.disabled = isBusy;
-      if (isBusy) {
-        runPromptBtn.innerHTML = '<span class="icon">⏳</span>Generating...';
-      } else {
-        runPromptBtn.innerHTML = '<span class="icon">✨</span>Generate';
-      }
-    }
-  }
 
   async function handlePromptRun(event) {
     if (event) event.preventDefault();
@@ -470,8 +452,7 @@
       return;
     }
 
-    setPromptBusy(true);
-    setStatusMessage("Processing prompt...");
+    setStatusMessage("Generating concept...");
 
     try {
       // Ensure canvas is properly sized before getting dimensions
@@ -495,19 +476,19 @@
         canvasHeight
       );
 
+      setStatusMessage("Generating artwork...");
+
       if (result.type === "rectangles") {
-        runWithConfig(result.config, "AI rectangles");
+        runWithConfig(result.config, "rectangles");
       } else if (result.type === "art_plan") {
-        runWithArtPlan(result.config, "AI art");
+        runWithArtPlan(result.config, "art plan");
       } else {
         throw new Error("Unknown result type from AI");
       }
     } catch (error) {
       console.error(error);
       const message = normalizeErrorMessage(error);
-      setStatusMessage(`AI error: ${message}`);
-    } finally {
-      setPromptBusy(false);
+      setStatusMessage(`Error: ${message}`);
     }
   }
 
@@ -537,12 +518,9 @@
   }
 
   // Hook up UI
-  if (runPromptBtn) {
-    runPromptBtn.addEventListener("click", handlePromptRun);
-  }
   if (promptInput) {
     promptInput.addEventListener("keydown", (event) => {
-      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+      if (event.key === "Enter") {
         event.preventDefault();
         handlePromptRun(event);
       }
