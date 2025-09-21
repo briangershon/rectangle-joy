@@ -24,10 +24,14 @@
   const promptInput = document.getElementById("prompt");
   const historyListEl = document.getElementById("historyList");
 
-  const HISTORY_STORAGE_KEY = "rectangleArtHistory";
-  const HISTORY_LIMIT = 10;
+  const historyClient = window.RectangleHistoryClient || null;
+  const HISTORY_LIMIT = historyClient?.HISTORY_LIMIT || 10;
 
   let artHistory = [];
+  let historyEndpointBase = "";
+  let historyLoading = false;
+  let historyLoadError = null;
+  let historyEnabled = !!historyClient;
 
   const DEFAULT_CONFIG = Object.freeze({
     color: "#1f77b4",
@@ -612,7 +616,7 @@
       }
 
       if (renderOutcome) {
-        persistPromptResult(promptText, result.type, renderOutcome);
+        await persistPromptResult(promptText, result.type, renderOutcome);
       }
     } catch (error) {
       console.error(error);
@@ -700,63 +704,10 @@
   // Initialize shader system after DOM is ready
   initShaderSystem();
 
-  function loadArtHistory() {
-    if (typeof window === "undefined" || !window.localStorage) {
-      return [];
-    }
-    try {
-      const raw = window.localStorage.getItem(HISTORY_STORAGE_KEY);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return [];
-      return parsed
-        .map((entry) => sanitizeHistoryEntry(entry))
-        .filter(Boolean)
-        .slice(0, HISTORY_LIMIT);
-    } catch (error) {
-      console.warn("Failed to load art history", error);
-      return [];
-    }
-  }
-
-  function sanitizeHistoryEntry(entry) {
-    if (!entry || typeof entry !== "object") return null;
-    const prompt = typeof entry.prompt === "string" ? entry.prompt : "";
-    const resultType = typeof entry.resultType === "string" ? entry.resultType : "unknown";
-    const createdAt = Number(entry.createdAt);
-    const id = typeof entry.id === "string" ? entry.id : null;
-    if (!id || !Number.isFinite(createdAt)) return null;
-
-    const config = sanitizeConfig(entry.config || {});
-    config.colorZones = cloneColorZones(entry.config?.colorZones || config.colorZones);
-
-    const rectangles = sanitizeRectangles(entry.rectangles);
-
-    return {
-      id,
-      prompt,
-      resultType,
-      createdAt,
-      config,
-      rectangles,
-      canvasWidth: Number(entry.canvasWidth) || 0,
-      canvasHeight: Number(entry.canvasHeight) || 0,
-    };
-  }
-
-  function saveArtHistory(entries) {
-    if (typeof window === "undefined" || !window.localStorage) {
-      return;
-    }
-    try {
-      const payload = JSON.stringify(entries.slice(0, HISTORY_LIMIT));
-      window.localStorage.setItem(HISTORY_STORAGE_KEY, payload);
-    } catch (error) {
-      console.warn("Failed to save art history", error);
-    }
-  }
-
   function formatHistoryTimestamp(timestamp) {
+    if (historyClient && typeof historyClient.formatHistoryTimestamp === "function") {
+      return historyClient.formatHistoryTimestamp(timestamp);
+    }
     try {
       return new Date(timestamp).toLocaleString();
     } catch (error) {
@@ -768,10 +719,28 @@
     if (!historyListEl) return;
     historyListEl.innerHTML = "";
 
-    if (!artHistory.length) {
+    if (!historyEnabled) {
+      const disabledItem = document.createElement("li");
+      disabledItem.className = "history-empty";
+      disabledItem.textContent = "History server not configured.";
+      historyListEl.appendChild(disabledItem);
+      return;
+    }
+
+    let message = "";
+
+    if (historyLoading) {
+      message = "Loading history...";
+    } else if (historyLoadError) {
+      message = historyLoadError;
+    } else if (!artHistory.length) {
+      message = "No saved art yet.";
+    }
+
+    if (message) {
       const emptyItem = document.createElement("li");
       emptyItem.className = "history-empty";
-      emptyItem.textContent = "No saved art yet.";
+      emptyItem.textContent = message;
       historyListEl.appendChild(emptyItem);
       return;
     }
@@ -782,7 +751,9 @@
       item.className = "history-item";
 
       const label = document.createElement("span");
-      label.textContent = `${entry.prompt || "(untitled)"} • ${formatHistoryTimestamp(entry.createdAt)}`;
+      label.textContent = `${entry.prompt || "(untitled)"} • ${
+        formatHistoryTimestamp(entry.createdAt)
+      }`;
 
       const button = document.createElement("button");
       button.type = "button";
@@ -797,10 +768,6 @@
     }
 
     historyListEl.appendChild(fragment);
-  }
-
-  function generateHistoryId(timestamp) {
-    return `${timestamp}-${Math.random().toString(36).slice(2, 8)}`;
   }
 
   function loadHistoryEntry(entryId) {
@@ -818,47 +785,66 @@
     setStatusMessage(`Loaded saved art from prompt: "${entry.prompt}"`);
   }
 
-  function createHistoryEntry({ prompt, resultType, renderDetails }) {
-    if (!renderDetails || !Array.isArray(renderDetails.rects)) return null;
-    const timestamp = Date.now();
-    const id = generateHistoryId(timestamp);
+  async function persistPromptResult(promptText, resultType, renderDetails) {
+    if (!historyEnabled) return;
+    if (!renderDetails || !Array.isArray(renderDetails.rects)) return;
 
-    return {
-      id,
-      prompt: prompt || "",
-      resultType,
-      createdAt: timestamp,
-      config: {
-        ...renderDetails.config,
-        colorZones: cloneColorZones(renderDetails.config?.colorZones),
-      },
-      rectangles: sanitizeRectangles(renderDetails.rects),
-      canvasWidth: renderDetails.canvasWidth || 0,
-      canvasHeight: renderDetails.canvasHeight || 0,
-    };
-  }
+    try {
+      const savedEntry = await historyClient.persistHistory(
+        historyEndpointBase,
+        promptText,
+        resultType,
+        renderDetails
+      );
+      if (!savedEntry) return;
 
-  function addHistoryEntry(entry) {
-    if (!entry) return;
-    artHistory.unshift(entry);
-    if (artHistory.length > HISTORY_LIMIT) {
-      artHistory = artHistory.slice(0, HISTORY_LIMIT);
+      historyLoadError = null;
+      artHistory.unshift(savedEntry);
+      if (artHistory.length > HISTORY_LIMIT) {
+        artHistory = artHistory.slice(0, HISTORY_LIMIT);
+      }
+      updateHistoryUI();
+    } catch (error) {
+      console.warn("Failed to save history", error);
+      historyLoadError = "Unable to save history right now.";
+      updateHistoryUI();
     }
-    saveArtHistory(artHistory);
+  }
+
+  async function initializeHistory() {
+    historyEndpointBase = historyClient.resolveHistoryApiBase();
+
+    if (
+      !historyEndpointBase &&
+      (typeof window === "undefined" || !window.location || window.location.origin === "null")
+    ) {
+      historyEnabled = false;
+      historyLoading = false;
+      historyLoadError = null;
+      updateHistoryUI();
+      return;
+    }
+
+    historyEnabled = true;
+    historyLoading = true;
+    historyLoadError = null;
     updateHistoryUI();
+
+    try {
+      const items = await historyClient.fetchHistory(historyEndpointBase);
+      artHistory = items;
+      historyLoadError = null;
+    } catch (error) {
+      console.warn("Failed to fetch history", error);
+      historyLoadError =
+        error && typeof error.message === "string" ? error.message : "Failed to load history.";
+    } finally {
+      historyLoading = false;
+      updateHistoryUI();
+    }
   }
 
-  function persistPromptResult(promptText, resultType, renderDetails) {
-    const entry = createHistoryEntry({
-      prompt: promptText,
-      resultType,
-      renderDetails,
-    });
-    addHistoryEntry(entry);
-  }
-
-  artHistory = loadArtHistory();
-  updateHistoryUI();
+  initializeHistory();
 
   // Initial draw
   runWithConfig(DEFAULT_CONFIG, "defaults");
