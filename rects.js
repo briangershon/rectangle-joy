@@ -23,6 +23,7 @@
   const statusEl = document.getElementById("status");
   const promptInput = document.getElementById("prompt");
   const historyListEl = document.getElementById("historyList");
+  const statusSpinner = document.getElementById("statusSpinner");
   const menuButton = document.getElementById("menuButton");
   const historyModal = document.getElementById("historyModal");
   const modalOverlay = document.getElementById("modalOverlay");
@@ -37,6 +38,7 @@
   let historyLoadError = null;
   let historyEnabled = !!historyClient;
   let lastFocusedBeforeModal = null;
+  let isGenerating = false;
 
   function isModalAvailable() {
     return historyModal && modalOverlay && modalClose;
@@ -62,6 +64,23 @@
       lastFocusedBeforeModal.focus();
     }
     lastFocusedBeforeModal = null;
+  }
+
+  function setGenerating(state) {
+    isGenerating = state;
+    if (statusSpinner) {
+      if (state) {
+        statusSpinner.classList.remove("hidden");
+        statusSpinner.setAttribute("aria-hidden", "false");
+      } else {
+        statusSpinner.classList.add("hidden");
+        statusSpinner.setAttribute("aria-hidden", "true");
+      }
+    }
+    if (promptInput) {
+      promptInput.setAttribute("aria-busy", state ? "true" : "false");
+      promptInput.setAttribute("data-generating", state ? "true" : "false");
+    }
   }
 
   const DEFAULT_CONFIG = Object.freeze({
@@ -594,6 +613,7 @@
 
   async function handlePromptRun(event) {
     if (event) event.preventDefault();
+    if (isGenerating) return;
     const promptText = promptInput ? promptInput.textContent.trim() : "";
     if (!promptText) {
       setStatusMessage("Enter a prompt to generate.");
@@ -611,6 +631,7 @@
       return;
     }
 
+    setGenerating(true);
     setStatusMessage("Generating concept...");
 
     try {
@@ -653,6 +674,8 @@
       console.error(error);
       const message = normalizeErrorMessage(error);
       setStatusMessage(`Error: ${message}`);
+    } finally {
+      setGenerating(false);
     }
   }
 

@@ -63,12 +63,42 @@
         font-style: italic;
       }
 
+      .status-wrap {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 1.2rem;
+      }
+
       .status {
         font-size: 0.85rem;
         color: #6b7280;
         font-variant-numeric: tabular-nums;
         text-align: center;
         opacity: 0.8;
+      }
+
+      .spinner {
+        display: inline-flex;
+        width: 20px;
+        height: 20px;
+        border: 3px solid #94a3b8;
+        border-top-color: #1f2937;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        margin-left: 4px;
+        vertical-align: middle;
+      }
+
+      .spinner.hidden {
+        display: none;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
       }
 
       .menu-button {
@@ -284,7 +314,10 @@
         >
           blue rectangles
         </h1>
-        <span class="status" id="status">—</span>
+        <div class="status-wrap" role="status" aria-live="polite">
+          <span class="status" id="status">—</span>
+          <span class="spinner hidden" id="statusSpinner" aria-hidden="true"></span>
+        </div>
         <button
           class="menu-button"
           id="menuButton"
