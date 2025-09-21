@@ -185,11 +185,11 @@
       }
 
       // Log progress every 1000 attempts
-      if (attempts % 1000 === 0) {
-        console.log(
-          `Debug: Rectangle generation progress: ${rects.length}/${targetCount} placed, ${attempts} attempts`
-        );
-      }
+      //   if (attempts % 1000 === 0) {
+      //     console.log(
+      //       `Debug: Rectangle generation progress: ${rects.length}/${targetCount} placed, ${attempts} attempts`
+      //     );
+      //   }
     }
 
     console.log(
