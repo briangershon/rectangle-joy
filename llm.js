@@ -100,31 +100,36 @@
                 type: "number",
                 minimum: 0,
                 maximum: 6000,
-                description: "X coordinate in pixels (center for circles, top-left for rectangles)",
+                description:
+                  "X coordinate in pixels (center for circles, top-left for rectangles)",
               },
               y: {
                 type: "number",
                 minimum: 0,
                 maximum: 6000,
-                description: "Y coordinate in pixels (center for circles, top-left for rectangles)",
+                description:
+                  "Y coordinate in pixels (center for circles, top-left for rectangles)",
               },
               radius: {
                 type: "number",
                 minimum: 50,
                 maximum: 3000,
-                description: "Zone radius in pixels (for circular zones only) - scale proportionally to canvas size, use 15-30% of canvas width for visibility",
+                description:
+                  "Zone radius in pixels (for circular zones only) - scale proportionally to canvas size, use 15-30% of canvas width for visibility",
               },
               width: {
                 type: "number",
                 minimum: 50,
                 maximum: 6000,
-                description: "Zone width in pixels (for rectangular zones only)",
+                description:
+                  "Zone width in pixels (for rectangular zones only)",
               },
               height: {
                 type: "number",
                 minimum: 50,
                 maximum: 6000,
-                description: "Zone height in pixels (for rectangular zones only)",
+                description:
+                  "Zone height in pixels (for rectangular zones only)",
               },
               color: {
                 type: "string",
@@ -311,7 +316,7 @@
 
     const payload = {
       model: "gpt-4o-mini",
-      temperature: 0.2,
+      temperature: 0.4,
       input: [
         { role: "system", content: AGENT_SYSTEM_PROMPT },
         { role: "user", content: userPrompt },
@@ -424,7 +429,7 @@
 
     const payload = {
       model: "gpt-4o-mini",
-      temperature: 0.3,
+      temperature: 0.5,
       input: [
         { role: "system", content: ART_PLANNER_SYSTEM_PROMPT },
         { role: "user", content: userPrompt },
@@ -555,7 +560,7 @@
 
     const payload = {
       model: "gpt-4o-mini",
-      temperature: 0.2,
+      temperature: 0.4,
       input: [
         { role: "system", content: combinedSystemPrompt },
         { role: "user", content: userPrompt },
