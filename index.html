@@ -16,7 +16,7 @@
       }
       #wrap {
         display: grid;
-        grid-template-rows: auto 1fr;
+        grid-template-rows: auto 1fr auto;
         height: 100%;
       }
       header {
@@ -75,6 +75,59 @@
         width: 100%;
         height: 100%;
       }
+
+      .about {
+        padding: 20px;
+        border-top: 1px solid #e5e7eb;
+        background: #f9fafb;
+        text-align: center;
+        max-width: 800px;
+        margin: 0 auto;
+        width: 100%;
+      }
+
+      .about h2 {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #1f2937;
+        margin: 0 0 12px 0;
+      }
+
+      .about .author {
+        font-size: 1rem;
+        color: #6b7280;
+        margin: 0 0 8px 0;
+      }
+
+      .about .links {
+        margin: 8px 0 16px 0;
+        font-size: 0.9rem;
+      }
+
+      .about .links a {
+        color: #3b82f6;
+        text-decoration: none;
+        margin: 0 12px;
+      }
+
+      .about .links a:hover {
+        text-decoration: underline;
+      }
+
+      .about .subtitle {
+        font-size: 1.1rem;
+        font-weight: 500;
+        color: #7c3aed;
+        margin: 0 0 16px 0;
+      }
+
+      .about .approach {
+        font-size: 0.9rem;
+        color: #4b5563;
+        line-height: 1.5;
+        max-width: 600px;
+        margin: 0 auto;
+      }
     </style>
   </head>
   <body>
@@ -86,11 +139,32 @@
           class="editable-title"
           data-placeholder="Describe what you want: simple rectangles (color, count, size) or artistic patterns (happy face, traffic light, etc.)"
         >
-          2000 blue rectangles between 8 and 16 pixels in size
+          blue rectangles
         </h1>
         <span class="status" id="status">—</span>
       </header>
       <canvas id="rectCanvas"></canvas>
+      <div class="about">
+        <h2>Rectangular Art Planner</h2>
+        <div class="author">by Brian Gershon</div>
+        <div class="links">
+          <a href="https://briangershon.com" target="_blank"
+            >briangershon.com</a
+          >
+          <a href="https://github.com/placeholder/repo" target="_blank"
+            >GitHub</a
+          >
+        </div>
+        <div class="subtitle">CascadiaJS AI Hackathon 2025</div>
+        <div class="approach">
+          This project explores generative art through AI-assisted rectangle
+          packing algorithms. By defining minimal primitives and leveraging
+          language models for creative direction, it demonstrates how natural
+          language can guide algorithmic art creation. The approach combines
+          mathematical constraints with artistic interpretation to generate
+          unique visual compositions from simple textual descriptions.
+        </div>
+      </div>
     </div>
 
     <script src="config.js"></script>
