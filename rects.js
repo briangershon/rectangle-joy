@@ -23,6 +23,10 @@
   const statusEl = document.getElementById("status");
   const promptInput = document.getElementById("prompt");
   const historyListEl = document.getElementById("historyList");
+  const menuButton = document.getElementById("menuButton");
+  const historyModal = document.getElementById("historyModal");
+  const modalOverlay = document.getElementById("modalOverlay");
+  const modalClose = document.getElementById("modalClose");
 
   const historyClient = window.RectangleHistoryClient || null;
   const HISTORY_LIMIT = historyClient?.HISTORY_LIMIT || 10;
@@ -32,6 +36,33 @@
   let historyLoading = false;
   let historyLoadError = null;
   let historyEnabled = !!historyClient;
+  let lastFocusedBeforeModal = null;
+
+  function isModalAvailable() {
+    return historyModal && modalOverlay && modalClose;
+  }
+
+  function openHistoryModal() {
+    if (!historyEnabled || !isModalAvailable()) return;
+    if (!historyModal.hidden) return;
+    lastFocusedBeforeModal = document.activeElement;
+    historyModal.hidden = false;
+    if (menuButton) menuButton.setAttribute("aria-expanded", "true");
+    window.requestAnimationFrame(() => {
+      modalClose?.focus();
+    });
+  }
+
+  function closeHistoryModal() {
+    if (!isModalAvailable()) return;
+    if (historyModal.hidden) return;
+    historyModal.hidden = true;
+    if (menuButton) menuButton.setAttribute("aria-expanded", "false");
+    if (lastFocusedBeforeModal && typeof lastFocusedBeforeModal.focus === "function") {
+      lastFocusedBeforeModal.focus();
+    }
+    lastFocusedBeforeModal = null;
+  }
 
   const DEFAULT_CONFIG = Object.freeze({
     color: "#1f77b4",
@@ -695,6 +726,23 @@
     });
   }
 
+  if (menuButton && isModalAvailable()) {
+    menuButton.addEventListener("click", () => {
+      if (historyModal.hidden) {
+        openHistoryModal();
+      } else {
+        closeHistoryModal();
+      }
+    });
+    modalClose.addEventListener("click", closeHistoryModal);
+  }
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && historyModal && !historyModal.hidden) {
+      closeHistoryModal();
+    }
+  });
+
   // Add mouse tracking for interactive reflections
   canvas.addEventListener("mousemove", handleMouseMove);
   canvas.addEventListener("mouseleave", handleMouseLeave);
@@ -764,6 +812,7 @@
       viewButton.textContent = "View";
       viewButton.addEventListener("click", () => {
         loadHistoryEntry(entry.id);
+        closeHistoryModal();
       });
 
       const deleteButton = document.createElement("button");
@@ -785,6 +834,7 @@
           artHistory = artHistory.filter((itemEntry) => itemEntry.id !== entry.id);
           updateHistoryUI();
           setStatusMessage(`Deleted saved art: "${promptLabel}"`);
+          closeHistoryModal();
         } catch (error) {
           console.warn("Failed to delete history", error);
           historyLoadError = "Unable to delete history right now.";
@@ -851,8 +901,18 @@
       historyEnabled = false;
       historyLoading = false;
       historyLoadError = null;
+      closeHistoryModal();
+      if (menuButton) {
+        menuButton.disabled = true;
+        menuButton.setAttribute("aria-disabled", "true");
+      }
       updateHistoryUI();
       return;
+    }
+
+    if (menuButton) {
+      menuButton.disabled = false;
+      menuButton.removeAttribute("aria-disabled");
     }
 
     historyEndpointBase = historyClient.resolveHistoryApiBase();
