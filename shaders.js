@@ -20,10 +20,32 @@
     uniform vec2 u_resolution;
     uniform float u_frameWidth;
     uniform float u_glassIntensity;
+    uniform float u_reflectionIntensity;
+    uniform vec2 u_mousePosition;
 
     varying vec2 v_texCoord;
 
-    // Frame effect function
+    // Procedural noise function for surface variation
+    float noise(vec2 uv) {
+      return fract(sin(dot(uv, vec2(12.9898, 78.233))) * 43758.5453);
+    }
+
+    // Smooth noise
+    float smoothNoise(vec2 uv) {
+      vec2 i = floor(uv);
+      vec2 f = fract(uv);
+
+      float a = noise(i);
+      float b = noise(i + vec2(1.0, 0.0));
+      float c = noise(i + vec2(0.0, 1.0));
+      float d = noise(i + vec2(1.0, 1.0));
+
+      vec2 u = f * f * (3.0 - 2.0 * f);
+
+      return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+    }
+
+    // Frame effect function with reflections
     vec4 applyFrame(vec2 uv, vec4 originalColor) {
       vec2 center = vec2(0.5, 0.5);
       vec2 dist = abs(uv - center);
@@ -44,17 +66,77 @@
         // Normalize edge distance for frame thickness
         float normalizedDist = edgeDist / frameThickness;
 
-        // Create beveled frame effect
+        // Create beveled frame effect with stronger material definition
         float bevel = smoothstep(0.0, 1.0, normalizedDist);
-        vec3 frameColor = mix(
-          vec3(0.2, 0.15, 0.1),  // Dark brown/black
-          vec3(0.4, 0.35, 0.25), // Lighter brown
+        vec3 baseFrameColor = mix(
+          vec3(0.3, 0.25, 0.18),   // Rich dark wood brown
+          vec3(0.5, 0.45, 0.35),   // Warm light wood brown
           bevel
         );
 
-        // Add inner shadow
+        // Enhanced wood grain effect for solid appearance
+        float surfaceNoise = smoothNoise(uv * 60.0 + vec2(0.0, uv.x * 25.0));
+        float grainPattern = smoothNoise(uv * vec2(220.0, 25.0));
+        float fineGrain = smoothNoise(uv * 400.0) * 0.03; // Fine wood texture
+
+        // Combine grain patterns for realistic wood appearance
+        float woodGrain = mix(surfaceNoise, grainPattern, 0.4) * 0.12 + fineGrain;
+
+        // Add wood color variation
+        vec3 grainColorVariation = vec3(woodGrain * 0.8, woodGrain * 0.6, woodGrain * 0.4);
+        vec3 frameColor = baseFrameColor + grainColorVariation;
+
+        // Calculate dynamic viewing direction based on mouse position
+        vec2 mouseOffset = u_mousePosition - vec2(0.5, 0.5); // Center mouse position
+        vec2 viewDirection = normalize(vec2(mouseOffset.x, -mouseOffset.y)); // Flip Y for screen coords
+
+        // Calculate surface normal relative to frame edge
+        vec2 surfaceToCenter = normalize(uv - center);
+
+        // Dynamic viewing angle for Fresnel effect (solid material behavior)
+        float viewAngle = dot(surfaceToCenter, viewDirection);
+        // Solid material Fresnel: more reflection at glancing angles, but not transparency
+        float fresnel = pow(1.0 - abs(viewAngle), 2.5) * 0.8; // Reduced intensity for solid material
+
+        // Mouse-responsive environment reflection for solid surface
+        float mouseInfluence = length(mouseOffset) * 1.5; // More subtle for solid material
+        vec2 reflectionOffset = mouseOffset * 0.3; // Reduced offset for surface reflection
+
+        // Environment reflection patterns that suggest room lighting reflecting off wood surface
+        float envPattern1 = sin((uv.x + reflectionOffset.x) * 5.0 + (uv.y + reflectionOffset.y) * 2.5) * 0.5 + 0.5;
+        float envPattern2 = sin((uv.y - reflectionOffset.x) * 3.0 + (uv.x + reflectionOffset.y) * 1.5) * 0.5 + 0.5;
+
+        // Blend environment patterns more subtly for solid material
+        float environmentReflection = mix(envPattern1, envPattern2, 0.6 + mouseInfluence * 0.15) * 0.2;
+
+        // Dynamic specular highlights based on mouse position
+        vec2 lightDir = normalize(vec2(1.0 + mouseOffset.x * 0.5, 1.0 + mouseOffset.y * 0.5));
+        vec2 surfaceNormal = normalize(vec2(
+          smoothNoise(uv * 100.0 + vec2(1.0, 0.0)) - smoothNoise(uv * 100.0 - vec2(1.0, 0.0)),
+          smoothNoise(uv * 100.0 + vec2(0.0, 1.0)) - smoothNoise(uv * 100.0 - vec2(0.0, 1.0))
+        )) * 0.3 + vec2(mouseOffset.x, -mouseOffset.y) * 0.2; // Add mouse influence to surface normal
+
+        vec2 reflectDir = reflect(-lightDir, surfaceNormal);
+        vec2 eyeDir = normalize(vec2(mouseOffset.x, mouseOffset.y));
+        float specular = pow(max(dot(reflectDir, eyeDir), 0.0), 12.0 + mouseInfluence * 8.0);
+
+        // Combine reflection effects for solid material (wood/metal surface reflection)
+        float totalReflection = (fresnel * environmentReflection + specular * 0.8) * u_reflectionIntensity;
+
+        // Solid material reflection - reflects off surface, not through material
+        vec3 materialReflectionColor = vec3(0.95, 0.98, 1.0); // Subtle warm reflection tint
+
+        // Surface-only reflection: add reflections to the material color rather than mixing
+        // This creates the appearance of light bouncing off a solid surface
+        vec3 surfaceReflection = materialReflectionColor * totalReflection * 0.25;
+        frameColor = frameColor + surfaceReflection;
+
+        // Ensure frame remains opaque and solid-looking
+        frameColor = clamp(frameColor, 0.0, 1.0);
+
+        // Add inner shadow for depth and beveled appearance
         float innerShadow = smoothstep(0.8, 1.0, normalizedDist);
-        frameColor = mix(frameColor, vec3(0.1, 0.08, 0.05), innerShadow * 0.5);
+        frameColor = mix(frameColor, vec3(0.15, 0.12, 0.08), innerShadow * 0.25);
 
         return vec4(frameColor, 1.0);
       }
@@ -194,7 +276,9 @@
           texture: gl.getUniformLocation(this.program, 'u_texture'),
           resolution: gl.getUniformLocation(this.program, 'u_resolution'),
           frameWidth: gl.getUniformLocation(this.program, 'u_frameWidth'),
-          glassIntensity: gl.getUniformLocation(this.program, 'u_glassIntensity')
+          glassIntensity: gl.getUniformLocation(this.program, 'u_glassIntensity'),
+          reflectionIntensity: gl.getUniformLocation(this.program, 'u_reflectionIntensity'),
+          mousePosition: gl.getUniformLocation(this.program, 'u_mousePosition')
         }
       };
 
@@ -207,6 +291,8 @@
       // Set default parameters
       this.frameWidth = 0.08; // 8% of canvas
       this.glassIntensity = 1.0;
+      this.reflectionIntensity = 0.6; // Subtle but noticeable reflections
+      this.mousePosition = { x: 0.5, y: 0.5 }; // Center position as default
     }
 
     setupGeometry() {
@@ -266,6 +352,8 @@
       gl.uniform2f(this.locations.uniforms.resolution, this.canvas.width, this.canvas.height);
       gl.uniform1f(this.locations.uniforms.frameWidth, this.frameWidth);
       gl.uniform1f(this.locations.uniforms.glassIntensity, this.glassIntensity);
+      gl.uniform1f(this.locations.uniforms.reflectionIntensity, this.reflectionIntensity);
+      gl.uniform2f(this.locations.uniforms.mousePosition, this.mousePosition.x, this.mousePosition.y);
 
       // Bind texture
       gl.activeTexture(gl.TEXTURE0);
@@ -281,6 +369,15 @@
 
     setGlassIntensity(intensity) {
       this.glassIntensity = Math.max(0.0, Math.min(2.0, intensity));
+    }
+
+    setReflectionIntensity(intensity) {
+      this.reflectionIntensity = Math.max(0.0, Math.min(1.5, intensity));
+    }
+
+    setMousePosition(x, y) {
+      this.mousePosition.x = Math.max(0.0, Math.min(1.0, x));
+      this.mousePosition.y = Math.max(0.0, Math.min(1.0, y));
     }
 
     resize(width, height) {

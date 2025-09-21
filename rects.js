@@ -70,6 +70,7 @@
         // Set some nice default values for the effects
         frameGlassShader.setFrameWidth(0.08); // 8% frame width
         frameGlassShader.setGlassIntensity(0.8); // Subtle glass effect
+        frameGlassShader.setReflectionIntensity(0.6); // Subtle reflective frame
       } else {
         console.warn('FrameGlassShader not available - falling back to standard rendering');
         ctx = canvas.getContext("2d");
@@ -571,6 +572,41 @@
     runWithConfig(activeConfig, activeSourceLabel);
   }
 
+  // Mouse tracking for interactive reflections
+  let lastMouseUpdate = 0;
+  const MOUSE_UPDATE_THROTTLE = 16; // ~60fps
+
+  function handleMouseMove(event) {
+    if (!frameGlassShader) return;
+
+    const now = Date.now();
+    if (now - lastMouseUpdate < MOUSE_UPDATE_THROTTLE) return;
+    lastMouseUpdate = now;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / rect.width;
+    const y = (event.clientY - rect.top) / rect.height;
+
+    frameGlassShader.setMousePosition(x, y);
+
+    // Re-render with new mouse position
+    if (frameGlassShader) {
+      frameGlassShader.render(sourceCanvas);
+    }
+  }
+
+  function handleMouseLeave() {
+    if (!frameGlassShader) return;
+
+    // Return to center position when mouse leaves
+    frameGlassShader.setMousePosition(0.5, 0.5);
+
+    // Re-render with center position
+    if (frameGlassShader) {
+      frameGlassShader.render(sourceCanvas);
+    }
+  }
+
   // Hook up UI
   if (promptInput) {
     promptInput.addEventListener("keydown", (event) => {
@@ -580,6 +616,11 @@
       }
     });
   }
+
+  // Add mouse tracking for interactive reflections
+  canvas.addEventListener("mousemove", handleMouseMove);
+  canvas.addEventListener("mouseleave", handleMouseLeave);
+
   window.addEventListener("resize", redrawActiveConfig);
 
   // Initialize shader system after DOM is ready
