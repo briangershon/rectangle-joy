@@ -4,9 +4,9 @@
     "Respond with valid JSON matching: { \"color\": string, \"count\": number, \"minSize\": number, \"maxSize\": number }.",
     "Rules:",
     "- color: CSS hex string (#rrggbb).",
-    "- count: integer 1-5000.",
-    "- minSize: integer 2-1000.",
-    "- maxSize: integer 2-2000 and >= minSize.",
+    "- count: integer 500-5000.",
+    "- minSize: integer 20-40.",
+    "- maxSize: integer 60-80 and >= minSize.",
     "Omitted values should fall back to sensible defaults within range.",
   ].join(" ");
 
@@ -22,18 +22,18 @@
       },
       count: {
         type: "integer",
-        minimum: 1,
+        minimum: 500,
         maximum: 5000,
       },
       minSize: {
         type: "integer",
-        minimum: 2,
-        maximum: 1000,
+        minimum: 20,
+        maximum: 40,
       },
       maxSize: {
         type: "integer",
-        minimum: 2,
-        maximum: 2000,
+        minimum: 60,
+        maximum: 80,
       },
     },
     required: ["color", "count", "minSize", "maxSize"],

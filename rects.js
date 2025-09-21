@@ -21,8 +21,8 @@
   const DEFAULT_CONFIG = Object.freeze({
     color: "#1f77b4",
     count: 1000,
-    minSize: 8,
-    maxSize: 60,
+    minSize: 20,
+    maxSize: 70,
   });
 
   const promptButtonIdleLabel = runPromptBtn ? runPromptBtn.textContent : "";
@@ -193,18 +193,18 @@
     const color = parseColor(config.color);
     const minSize = clampNumber(
       config.minSize,
-      2,
-      1000,
+      20,
+      40,
       DEFAULT_CONFIG.minSize
     );
     const maxCandidate = clampNumber(
       config.maxSize,
-      2,
-      2000,
+      60,
+      80,
       Math.max(DEFAULT_CONFIG.maxSize, minSize)
     );
     const maxSize = Math.max(minSize, maxCandidate);
-    const count = clampNumber(config.count, 1, 5000, DEFAULT_CONFIG.count);
+    const count = clampNumber(config.count, 500, 5000, DEFAULT_CONFIG.count);
 
     return { color, count, minSize, maxSize };
   }
