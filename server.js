@@ -159,8 +159,35 @@ async function saveHistory(req, res) {
   }
 }
 
+function validateUuid(value) {
+  return typeof value === "string" && /^[0-9a-fA-F-]{36}$/.test(value);
+}
+
+async function deleteHistory(req, res) {
+  if (!pool.options.connectionString) {
+    return res.status(500).json({ error: "DATABASE_URL is not configured." });
+  }
+
+  const { id } = req.params;
+  if (!validateUuid(id)) {
+    return res.status(400).json({ error: "Invalid history id." });
+  }
+
+  try {
+    const { rowCount } = await pool.query("DELETE FROM art_history WHERE id = $1", [id]);
+    if (rowCount === 0) {
+      return res.status(404).json({ error: "History entry not found." });
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("Failed to delete history", error);
+    res.status(500).json({ error: "Failed to delete history." });
+  }
+}
+
 app.get("/api/history", fetchHistory);
 app.post("/api/history", saveHistory);
+app.delete("/api/history/:id", deleteHistory);
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true, timestamp: Date.now() });

@@ -136,11 +136,31 @@
     return sanitizeHistoryEntry(data?.item);
   }
 
+  async function deleteHistory(base, id) {
+    if (!id) {
+      throw new Error("Missing history id");
+    }
+
+    const response = await fetch(historyApiUrl(base, `/api/history/${encodeURIComponent(id)}`), {
+      method: "DELETE",
+      headers: { Accept: "application/json" },
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      const message = text || response.statusText || "Failed to delete history.";
+      throw new Error(message);
+    }
+
+    return true;
+  }
+
   window.RectangleHistoryClient = {
     HISTORY_LIMIT,
     resolveHistoryApiBase,
     formatHistoryTimestamp,
     fetchHistory,
     persistHistory,
+    deleteHistory,
   };
 })();

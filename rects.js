@@ -755,15 +755,50 @@
         formatHistoryTimestamp(entry.createdAt)
       }`;
 
-      const button = document.createElement("button");
-      button.type = "button";
-      button.textContent = "View";
-      button.addEventListener("click", () => {
+      const buttons = document.createElement("div");
+      buttons.className = "history-buttons";
+
+      const viewButton = document.createElement("button");
+      viewButton.type = "button";
+      viewButton.className = "history-button view";
+      viewButton.textContent = "View";
+      viewButton.addEventListener("click", () => {
         loadHistoryEntry(entry.id);
       });
 
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.className = "history-button delete";
+      deleteButton.textContent = "✕";
+      deleteButton.addEventListener("click", async () => {
+        if (!historyEnabled || !historyClient) return;
+        const promptLabel = entry.prompt || "(untitled)";
+        const confirmed = window.confirm(
+          `Delete saved art "${promptLabel}"? This action cannot be undone.`
+        );
+        if (!confirmed) return;
+
+        deleteButton.disabled = true;
+        try {
+          await historyClient.deleteHistory(historyEndpointBase, entry.id);
+          historyLoadError = null;
+          artHistory = artHistory.filter((itemEntry) => itemEntry.id !== entry.id);
+          updateHistoryUI();
+          setStatusMessage(`Deleted saved art: "${promptLabel}"`);
+        } catch (error) {
+          console.warn("Failed to delete history", error);
+          historyLoadError = "Unable to delete history right now.";
+          updateHistoryUI();
+        } finally {
+          deleteButton.disabled = false;
+        }
+      });
+
+      buttons.appendChild(deleteButton);
+      buttons.appendChild(viewButton);
+
       item.appendChild(label);
-      item.appendChild(button);
+      item.appendChild(buttons);
       fragment.appendChild(item);
     }
 
@@ -812,6 +847,14 @@
   }
 
   async function initializeHistory() {
+    if (!historyClient) {
+      historyEnabled = false;
+      historyLoading = false;
+      historyLoadError = null;
+      updateHistoryUI();
+      return;
+    }
+
     historyEndpointBase = historyClient.resolveHistoryApiBase();
 
     if (

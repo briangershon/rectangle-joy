@@ -107,18 +107,38 @@
         color: #374151;
       }
 
-      .history-item button {
+      .history-buttons {
+        display: flex;
+        gap: 8px;
+      }
+
+      .history-button {
         border: none;
-        background: #3b82f6;
         color: #fff;
         padding: 6px 10px;
         border-radius: 4px;
         cursor: pointer;
         font-size: 0.8rem;
+        transition: background 0.2s ease;
       }
 
-      .history-item button:hover {
-        background: #2563eb;
+      .history-button.view {
+        background: #1f77b4;
+      }
+
+      .history-button.view:hover {
+        background: #155a87;
+      }
+
+      .history-button.delete {
+        background: transparent;
+        color: #ef4444;
+        padding: 6px 8px;
+      }
+
+      .history-button.delete:hover {
+        background: rgba(239, 68, 68, 0.12);
+        color: #c53030;
       }
 
       .history-empty {
