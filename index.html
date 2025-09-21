@@ -73,19 +73,19 @@
           <textarea
             id="prompt"
             rows="2"
-            placeholder="Describe the rectangles you want (color, count, sizes, etc.)"
+            placeholder="Describe what you want: simple rectangles (color, count, size) or artistic patterns (happy face, traffic light, etc.)"
           >
 2000 blue rectangles between 8 and 16 pixels in size</textarea
           >
         </label>
-        <button id="runPrompt">Apply Prompt</button>
+        <button id="runPrompt">Generate</button>
         <span class="badge" id="status">—</span>
       </header>
       <canvas id="rectCanvas"></canvas>
     </div>
 
     <script src="config.js"></script>
-    <script src="llm.js" defer></script>
-    <script src="rects.js" defer></script>
+    <script src="llm.js?v=6" defer></script>
+    <script src="rects.js?v=6" defer></script>
   </body>
 </html>

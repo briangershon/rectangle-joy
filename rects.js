@@ -23,6 +23,7 @@
     count: 1000,
     minSize: 20,
     maxSize: 70,
+    colorZones: [], // Array of {x, y, radius, color} objects
   });
 
   const promptButtonIdleLabel = runPromptBtn ? runPromptBtn.textContent : "";
@@ -99,6 +100,59 @@
     return Math.hypot(dx, dy);
   }
 
+  // Color zone utilities
+  function calculateZoneCoverage(rect, zone) {
+    // Calculate what percentage of the rectangle is inside the circular zone
+    const rectCenterX = rect.x + rect.w / 2;
+    const rectCenterY = rect.y + rect.h / 2;
+
+    // Use zone coordinates directly (assume they're already in CSS pixels)
+    const zoneX = zone.x;
+    const zoneY = zone.y;
+    const zoneRadius = zone.radius;
+
+    // Simple approximation: if rectangle center is within zone radius, consider it covered
+    const distanceToZoneCenter = Math.hypot(rectCenterX - zoneX, rectCenterY - zoneY);
+
+    if (distanceToZoneCenter <= zoneRadius) {
+      // Calculate coverage based on how much of the rectangle fits within the circle
+      const rectRadius = Math.hypot(rect.w / 2, rect.h / 2);
+      if (distanceToZoneCenter + rectRadius <= zoneRadius) {
+        return 1.0; // Fully inside
+      } else {
+        // Partial coverage - simplified linear interpolation
+        const overlapDistance = zoneRadius - distanceToZoneCenter;
+        return Math.max(0, Math.min(1, overlapDistance / rectRadius));
+      }
+    }
+
+    return 0;
+  }
+
+  function getEffectiveColor(rect, zones, defaultColor) {
+    // Find the zone with the highest coverage for this rectangle
+    let bestZone = null;
+    let bestCoverage = 0;
+
+    for (const zone of zones) {
+      const coverage = calculateZoneCoverage(rect, zone);
+      if (coverage > bestCoverage) {
+        bestCoverage = coverage;
+        bestZone = zone;
+      }
+    }
+
+    // Use zone color if coverage is > 5% (very low threshold for maximum zone visibility)
+    const useZoneColor = bestCoverage > 0.05 && bestZone;
+
+    // Debug: Log coverage for first few rectangles to understand what's happening
+    if (rect.x < 100 && rect.y < 100) {
+      console.log(`Debug: Rect at (${rect.x},${rect.y}) coverage: ${bestCoverage.toFixed(3)}, using zone color: ${useZoneColor}, zone:`, bestZone?.color);
+    }
+
+    return useZoneColor ? bestZone.color : defaultColor;
+  }
+
   // Validate a candidate rectangle against existing ones, allowing nesting with ≥ GAP margin.
   function isValidPlacement(candidate, rects, gap) {
     for (let i = 0; i < rects.length; i++) {
@@ -135,6 +189,8 @@
 
   // Try to place `targetCount` rectangles with random sizes in [minSize, maxSize].
   function generateRectangles(width, height, targetCount, minSize, maxSize) {
+    console.log(`Debug: Generating rectangles - target: ${targetCount}, canvas: ${width}x${height}, size: ${minSize}-${maxSize}`);
+
     const rects = [];
     let attempts = 0;
 
@@ -158,8 +214,14 @@
       if (isValidPlacement(cand, rects, GAP)) {
         rects.push(cand);
       }
+
+      // Log progress every 1000 attempts
+      if (attempts % 1000 === 0) {
+        console.log(`Debug: Rectangle generation progress: ${rects.length}/${targetCount} placed, ${attempts} attempts`);
+      }
     }
 
+    console.log(`Debug: Rectangle generation complete: ${rects.length}/${targetCount} rectangles placed in ${attempts} attempts`);
     return rects;
   }
 
@@ -168,10 +230,47 @@
     return Math.floor(Math.random() * (max - min + 1)) + min;
   }
 
-  function draw(rects, color) {
+  function draw(rects, color, colorZones = []) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = color;
+
+    // Draw color zones first (as semi-transparent guides)
+    if (colorZones.length > 0) {
+      console.log("Debug: Drawing", colorZones.length, "color zones on canvas", canvas.width, "x", canvas.height, ":", colorZones);
+      ctx.globalAlpha = 0.4; // Much more visible for debugging
+      for (const zone of colorZones) {
+        // Test: Use zone coordinates directly (assuming they're already in CSS pixels)
+        const dpr = window.devicePixelRatio || 1;
+        const cssCanvasWidth = canvas.width / dpr;
+        const cssCanvasHeight = canvas.height / dpr;
+
+        // Try both approaches to see which works
+        const zoneXDirect = zone.x;
+        const zoneYDirect = zone.y;
+        const zoneRadiusDirect = zone.radius;
+
+        const zoneXDivided = zone.x / dpr;
+        const zoneYDivided = zone.y / dpr;
+        const zoneRadiusDivided = zone.radius / dpr;
+
+        console.log(`Debug: Zone raw values: (${zone.x},${zone.y}) radius ${zone.radius}`);
+        console.log(`Debug: Canvas CSS size: ${cssCanvasWidth} x ${cssCanvasHeight}`);
+        console.log(`Debug: Direct approach: (${zoneXDirect},${zoneYDirect}) radius ${zoneRadiusDirect}`);
+        console.log(`Debug: Divided approach: (${zoneXDivided},${zoneYDivided}) radius ${zoneRadiusDivided}`);
+        console.log(`Debug: Direct percentages: X=${(zoneXDirect/cssCanvasWidth*100).toFixed(1)}%, Y=${(zoneYDirect/cssCanvasHeight*100).toFixed(1)}%, R=${(zoneRadiusDirect/cssCanvasWidth*100).toFixed(1)}% of width`);
+
+        // Use direct coordinates (assume AI gives CSS pixel values)
+        ctx.fillStyle = zone.color;
+        ctx.beginPath();
+        ctx.arc(zoneXDirect, zoneYDirect, zoneRadiusDirect, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1.0;
+    }
+
+    // Draw rectangles with zone-based coloring
     for (const r of rects) {
+      const effectiveColor = getEffectiveColor(r, colorZones, color);
+      ctx.fillStyle = effectiveColor;
       ctx.fillRect(r.x, r.y, r.w, r.h);
     }
   }
@@ -205,8 +304,29 @@
     );
     const maxSize = Math.max(minSize, maxCandidate);
     const count = clampNumber(config.count, 500, 5000, DEFAULT_CONFIG.count);
+    const colorZones = sanitizeColorZones(config.colorZones);
 
-    return { color, count, minSize, maxSize };
+    return { color, count, minSize, maxSize, colorZones };
+  }
+
+  function sanitizeColorZones(zones) {
+    if (!Array.isArray(zones)) {
+      return [];
+    }
+
+    return zones
+      .filter(zone => zone && typeof zone === "object")
+      .map(zone => ({
+        x: Number(zone.x) || 0,
+        y: Number(zone.y) || 0,
+        radius: Math.max(1, Number(zone.radius) || 50),
+        color: parseColor(zone.color)
+      }))
+      .filter(zone =>
+        Number.isFinite(zone.x) &&
+        Number.isFinite(zone.y) &&
+        Number.isFinite(zone.radius)
+      );
   }
 
   function clampNumber(value, min, max, fallback) {
@@ -247,16 +367,36 @@
       safeConfig.minSize,
       safeConfig.maxSize
     );
-    draw(rects, safeConfig.color);
+    draw(rects, safeConfig.color, safeConfig.colorZones || []);
     updateStatus(rects.length, safeConfig.count, sourceLabel);
+  }
+
+  function runWithArtPlan(artPlan, sourceLabel = "art plan") {
+    console.log("Debug: runWithArtPlan called with:", artPlan);
+
+    if (!artPlan || !artPlan.rectangles || !artPlan.colorZones) {
+      console.log("Debug: Invalid art plan structure:", { artPlan, hasRectangles: !!artPlan?.rectangles, hasColorZones: !!artPlan?.colorZones });
+      throw new Error("Invalid art plan structure");
+    }
+
+    console.log("Debug: Art plan rectangles config:", artPlan.rectangles);
+    console.log("Debug: Art plan color zones:", artPlan.colorZones);
+
+    const combinedConfig = {
+      ...artPlan.rectangles,
+      colorZones: artPlan.colorZones,
+    };
+
+    console.log("Debug: Combined config for art plan:", combinedConfig);
+    runWithConfig(combinedConfig, sourceLabel);
   }
 
   function setPromptBusy(isBusy) {
     if (runPromptBtn) {
       runPromptBtn.disabled = isBusy;
       runPromptBtn.textContent = isBusy
-        ? "Working..."
-        : promptButtonIdleLabel || "Apply Prompt";
+        ? "Generating..."
+        : promptButtonIdleLabel || "Generate";
     }
     if (regenBtn) {
       regenBtn.disabled = isBusy;
@@ -267,7 +407,7 @@
     if (event) event.preventDefault();
     const promptText = promptInput ? promptInput.value.trim() : "";
     if (!promptText) {
-      setStatusMessage("Enter a prompt to apply.");
+      setStatusMessage("Enter a prompt to generate.");
       if (promptInput) promptInput.focus();
       return;
     }
@@ -283,15 +423,31 @@
     }
 
     setPromptBusy(true);
-    setStatusMessage("Interpreting prompt...");
+    setStatusMessage("Processing prompt...");
 
     try {
-      const config = await LLMRectangles.requestRectangleConfig(promptText);
-      runWithConfig(config, "prompt");
+      // Ensure canvas is properly sized before getting dimensions
+      resizeCanvasToDisplaySize();
+
+      // Get actual canvas dimensions for AI planning
+      const canvasWidth = canvas.width;
+      const canvasHeight = canvas.height;
+
+      console.log("Debug: Sending canvas dimensions to AI:", canvasWidth, "x", canvasHeight);
+
+      const result = await LLMRectangles.processPrompt(promptText, canvasWidth, canvasHeight);
+
+      if (result.type === "rectangles") {
+        runWithConfig(result.config, "AI rectangles");
+      } else if (result.type === "art_plan") {
+        runWithArtPlan(result.config, "AI art");
+      } else {
+        throw new Error("Unknown result type from AI");
+      }
     } catch (error) {
       console.error(error);
       const message = normalizeErrorMessage(error);
-      setStatusMessage(`Prompt error: ${message}`);
+      setStatusMessage(`AI error: ${message}`);
     } finally {
       setPromptBusy(false);
     }
@@ -312,7 +468,7 @@
     return (
       typeof window !== "undefined" &&
       typeof window.LLMRectangles === "object" &&
-      typeof window.LLMRectangles.requestRectangleConfig === "function" &&
+      typeof window.LLMRectangles.processPrompt === "function" &&
       typeof window.LLMRectangles.isApiKeyAvailable === "function"
     );
   }
