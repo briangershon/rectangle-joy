@@ -37,7 +37,8 @@
       }
       button,
       select,
-      input {
+      input,
+      textarea {
         font: inherit;
         padding: 6px 10px;
         border: 1px solid #d1d5db;
@@ -47,17 +48,41 @@
       button {
         cursor: pointer;
       }
+      header .stack {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        font-size: 0.85rem;
+      }
+      header .stack > span {
+        color: #4b5563;
+      }
+      header textarea {
+        min-width: 240px;
+        min-height: 56px;
+        resize: vertical;
+      }
     </style>
   </head>
   <body>
     <div id="wrap">
       <header>
-        <button id="regen">Regenerate</button>
+        <button id="regen">Regenerate Defaults</button>
+        <label class="stack" for="prompt">
+          <span>Prompt</span>
+          <textarea
+            id="prompt"
+            rows="2"
+            placeholder="Describe the rectangles you want (color, count, sizes, etc.)"
+          ></textarea>
+        </label>
+        <button id="runPrompt">Apply Prompt</button>
         <span class="badge" id="status">—</span>
       </header>
       <canvas id="rectCanvas"></canvas>
     </div>
 
+    <script src="config.js"></script>
     <script src="rects.js" defer></script>
   </body>
 </html>

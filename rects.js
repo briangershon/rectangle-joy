@@ -15,11 +15,59 @@
 
   const regenBtn = document.getElementById("regen");
   const statusEl = document.getElementById("status");
+  const promptInput = document.getElementById("prompt");
+  const runPromptBtn = document.getElementById("runPrompt");
 
-  const DEFAULT_COLOR = "#1f77b4";
-  const DEFAULT_TARGET_COUNT = 1000;
-  const DEFAULT_MIN_SIZE = 8;
-  const DEFAULT_MAX_SIZE = 60;
+  const DEFAULT_CONFIG = Object.freeze({
+    color: "#1f77b4",
+    count: 1000,
+    minSize: 8,
+    maxSize: 60,
+  });
+
+  const AGENT_SYSTEM_PROMPT = [
+    "You translate natural-language prompts into rectangle generation settings.",
+    'Respond with valid JSON matching: { "color": string, "count": number, "minSize": number, "maxSize": number }.',
+    "Rules:",
+    "- color: CSS hex string (#rrggbb).",
+    "- count: integer 1-5000.",
+    "- minSize: integer 2-1000.",
+    "- maxSize: integer 2-2000 and >= minSize.",
+    "Omitted values should fall back to sensible defaults within range.",
+  ].join(" ");
+
+  const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
+
+  const RECT_CONFIG_JSON_SCHEMA = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      color: {
+        type: "string",
+        pattern: "^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{3})$",
+      },
+      count: {
+        type: "integer",
+        minimum: 500,
+        maximum: 5000,
+      },
+      minSize: {
+        type: "integer",
+        minimum: 8,
+        maximum: 16,
+      },
+      maxSize: {
+        type: "integer",
+        minimum: 60,
+        maximum: 300,
+      },
+    },
+    required: ["color", "count", "minSize", "maxSize"],
+  };
+
+  const promptButtonIdleLabel = runPromptBtn ? runPromptBtn.textContent : "";
+  let activeConfig = { ...DEFAULT_CONFIG };
+  let activeSourceLabel = "defaults";
 
   // Resize canvas to device pixels for crispness
   function resizeCanvasToDisplaySize() {
@@ -168,27 +216,263 @@
     }
   }
 
-  function updateStatus(placed, target) {
-    statusEl.textContent = `Placed ${placed} / ${target} rectangles`;
+  function setStatusMessage(text) {
+    statusEl.textContent = text;
   }
 
-  function regenerate() {
-    resizeCanvasToDisplaySize();
+  function updateStatus(placed, target, sourceLabel) {
+    const detail = sourceLabel ? ` - ${sourceLabel}` : "";
+    setStatusMessage(`Placed ${placed} / ${target} rectangles${detail}`);
+  }
 
+  function sanitizeConfig(config) {
+    if (!config || typeof config !== "object") {
+      return { ...DEFAULT_CONFIG };
+    }
+
+    const color = parseColor(config.color);
+    const minSize = clampNumber(
+      config.minSize,
+      2,
+      1000,
+      DEFAULT_CONFIG.minSize
+    );
+    const maxCandidate = clampNumber(
+      config.maxSize,
+      2,
+      2000,
+      Math.max(DEFAULT_CONFIG.maxSize, minSize)
+    );
+    const maxSize = Math.max(minSize, maxCandidate);
+    const count = clampNumber(config.count, 1, 5000, DEFAULT_CONFIG.count);
+
+    return { color, count, minSize, maxSize };
+  }
+
+  function clampNumber(value, min, max, fallback) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return fallback;
+    const rounded = Math.round(num);
+    if (rounded < min) return min;
+    if (rounded > max) return max;
+    return rounded;
+  }
+
+  function parseColor(value) {
+    if (typeof value !== "string") return DEFAULT_CONFIG.color;
+    const trimmed = value.trim();
+    if (/^#([0-9a-f]{6})$/i.test(trimmed)) {
+      return trimmed.toLowerCase();
+    }
+    if (/^#([0-9a-f]{3})$/i.test(trimmed)) {
+      const hex = trimmed.slice(1);
+      return `#${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}`.toLowerCase();
+    }
+    return DEFAULT_CONFIG.color;
+  }
+
+  function runWithConfig(config, sourceLabel = "defaults") {
+    resizeCanvasToDisplaySize();
+    const safeConfig = sanitizeConfig(config);
+    activeConfig = safeConfig;
+    activeSourceLabel = sourceLabel;
     const rects = generateRectangles(
       canvas.width,
       canvas.height,
-      DEFAULT_TARGET_COUNT,
-      DEFAULT_MIN_SIZE,
-      DEFAULT_MAX_SIZE
+      safeConfig.count,
+      safeConfig.minSize,
+      safeConfig.maxSize
     );
-    draw(rects, DEFAULT_COLOR);
-    updateStatus(rects.length, DEFAULT_TARGET_COUNT);
+    draw(rects, safeConfig.color);
+    updateStatus(rects.length, safeConfig.count, sourceLabel);
+  }
+
+  function setPromptBusy(isBusy) {
+    if (runPromptBtn) {
+      runPromptBtn.disabled = isBusy;
+      runPromptBtn.textContent = isBusy
+        ? "Working..."
+        : promptButtonIdleLabel || "Apply Prompt";
+    }
+    if (regenBtn) {
+      regenBtn.disabled = isBusy;
+    }
+  }
+
+  async function handlePromptRun(event) {
+    if (event) event.preventDefault();
+    const promptText = promptInput ? promptInput.value.trim() : "";
+    if (!promptText) {
+      setStatusMessage("Enter a prompt to apply.");
+      if (promptInput) promptInput.focus();
+      return;
+    }
+
+    if (!isApiKeyAvailable()) {
+      setStatusMessage("Set OPENAI_API_KEY in config.js to use the agent.");
+      return;
+    }
+
+    setPromptBusy(true);
+    setStatusMessage("Interpreting prompt...");
+
+    try {
+      const config = await requestRectanglesFromPrompt(promptText);
+      runWithConfig(config, "prompt");
+    } catch (error) {
+      console.error(error);
+      const message = normalizeErrorMessage(error);
+      setStatusMessage(`Prompt error: ${message}`);
+    } finally {
+      setPromptBusy(false);
+    }
+  }
+
+  function normalizeErrorMessage(error) {
+    const message =
+      error && typeof error.message === "string"
+        ? error.message
+        : "Unknown error";
+    if (message === "Failed to fetch") {
+      return "Network request blocked. Check your connection, CORS, or browser console.";
+    }
+    return message;
+  }
+
+  function isApiKeyAvailable() {
+    return (
+      typeof OPENAI_API_KEY === "string" && OPENAI_API_KEY.trim().length > 0
+    );
+  }
+
+  async function requestRectanglesFromPrompt(userPrompt) {
+    const response = await fetch(OPENAI_RESPONSES_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "OpenAI-Beta": "responses=v1",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        temperature: 0.2,
+        input: [
+          { role: "system", content: AGENT_SYSTEM_PROMPT },
+          { role: "user", content: userPrompt },
+        ],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "rectangle_config",
+            schema: RECT_CONFIG_JSON_SCHEMA,
+          },
+        },
+      }),
+    });
+
+    const rawBody = await response.text();
+    if (!response.ok) {
+      let message = `OpenAI error ${response.status}`;
+      try {
+        const errorPayload = JSON.parse(rawBody);
+        if (errorPayload?.error?.message) {
+          message = errorPayload.error.message;
+        }
+      } catch (parseError) {
+        if (rawBody) message = `${message}: ${rawBody}`;
+      }
+      throw new Error(message);
+    }
+
+    let data;
+    try {
+      data = JSON.parse(rawBody);
+    } catch (parseError) {
+      throw new Error("Failed to parse OpenAI response.");
+    }
+
+    return parseModelResponse(data);
+  }
+
+  function parseModelResponse(data) {
+    const content = extractResponseText(data);
+    const jsonBlock = extractJsonBlock(content);
+    if (!jsonBlock) {
+      throw new Error("Model response missing JSON block.");
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonBlock);
+    } catch (error) {
+      throw new Error("Model returned invalid JSON.");
+    }
+
+    if (!parsed || typeof parsed !== "object") {
+      throw new Error("Model returned unsupported payload.");
+    }
+
+    return parsed;
+  }
+
+  function extractResponseText(data) {
+    if (!data || typeof data !== "object") return "";
+
+    if (Array.isArray(data.output)) {
+      const buffer = [];
+      for (const item of data.output) {
+        if (item?.type === "message" && Array.isArray(item.content)) {
+          for (const part of item.content) {
+            if (part?.type === "output_text" && typeof part.text === "string") {
+              buffer.push(part.text);
+            }
+          }
+        }
+      }
+      if (buffer.length) return buffer.join("\n");
+    }
+
+    if (Array.isArray(data.output_text)) {
+      const joined = data.output_text
+        .filter((t) => typeof t === "string")
+        .join("\n");
+      if (joined) return joined;
+    }
+
+    if (typeof data.content === "string") return data.content;
+
+    return "";
+  }
+
+  function extractJsonBlock(text) {
+    if (!text) return null;
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start === -1 || end === -1 || end <= start) return null;
+    return text.slice(start, end + 1);
+  }
+
+  function regenerate() {
+    runWithConfig(DEFAULT_CONFIG, "defaults");
+  }
+
+  function redrawActiveConfig() {
+    runWithConfig(activeConfig, activeSourceLabel);
   }
 
   // Hook up UI
   regenBtn.addEventListener("click", regenerate);
-  window.addEventListener("resize", regenerate);
+  if (runPromptBtn) {
+    runPromptBtn.addEventListener("click", handlePromptRun);
+  }
+  if (promptInput) {
+    promptInput.addEventListener("keydown", (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+        handlePromptRun(event);
+      }
+    });
+  }
+  window.addEventListener("resize", redrawActiveConfig);
 
   // Initial draw
   regenerate();
