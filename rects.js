@@ -25,46 +25,6 @@
     maxSize: 60,
   });
 
-  const AGENT_SYSTEM_PROMPT = [
-    "You translate natural-language prompts into rectangle generation settings.",
-    'Respond with valid JSON matching: { "color": string, "count": number, "minSize": number, "maxSize": number }.',
-    "Rules:",
-    "- color: CSS hex string (#rrggbb).",
-    "- count: integer 1-5000.",
-    "- minSize: integer 2-1000.",
-    "- maxSize: integer 2-2000 and >= minSize.",
-    "Omitted values should fall back to sensible defaults within range.",
-  ].join(" ");
-
-  const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
-
-  const RECT_CONFIG_JSON_SCHEMA = {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      color: {
-        type: "string",
-        pattern: "^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{3})$",
-      },
-      count: {
-        type: "integer",
-        minimum: 500,
-        maximum: 5000,
-      },
-      minSize: {
-        type: "integer",
-        minimum: 8,
-        maximum: 16,
-      },
-      maxSize: {
-        type: "integer",
-        minimum: 60,
-        maximum: 300,
-      },
-    },
-    required: ["color", "count", "minSize", "maxSize"],
-  };
-
   const promptButtonIdleLabel = runPromptBtn ? runPromptBtn.textContent : "";
   let activeConfig = { ...DEFAULT_CONFIG };
   let activeSourceLabel = "defaults";
@@ -308,7 +268,12 @@
       return;
     }
 
-    if (!isApiKeyAvailable()) {
+    if (!hasLLMSupport()) {
+      setStatusMessage("LLM module unavailable. Check llm.js load order.");
+      return;
+    }
+
+    if (!LLMRectangles.isApiKeyAvailable()) {
       setStatusMessage("Set OPENAI_API_KEY in config.js to use the agent.");
       return;
     }
@@ -317,7 +282,7 @@
     setStatusMessage("Interpreting prompt...");
 
     try {
-      const config = await requestRectanglesFromPrompt(promptText);
+      const config = await LLMRectangles.requestRectangleConfig(promptText);
       runWithConfig(config, "prompt");
     } catch (error) {
       console.error(error);
@@ -339,117 +304,13 @@
     return message;
   }
 
-  function isApiKeyAvailable() {
+  function hasLLMSupport() {
     return (
-      typeof OPENAI_API_KEY === "string" && OPENAI_API_KEY.trim().length > 0
+      typeof window !== "undefined" &&
+      typeof window.LLMRectangles === "object" &&
+      typeof window.LLMRectangles.requestRectangleConfig === "function" &&
+      typeof window.LLMRectangles.isApiKeyAvailable === "function"
     );
-  }
-
-  async function requestRectanglesFromPrompt(userPrompt) {
-    const response = await fetch(OPENAI_RESPONSES_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-        "OpenAI-Beta": "responses=v1",
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        temperature: 0.2,
-        input: [
-          { role: "system", content: AGENT_SYSTEM_PROMPT },
-          { role: "user", content: userPrompt },
-        ],
-        text: {
-          format: {
-            type: "json_schema",
-            name: "rectangle_config",
-            schema: RECT_CONFIG_JSON_SCHEMA,
-          },
-        },
-      }),
-    });
-
-    const rawBody = await response.text();
-    if (!response.ok) {
-      let message = `OpenAI error ${response.status}`;
-      try {
-        const errorPayload = JSON.parse(rawBody);
-        if (errorPayload?.error?.message) {
-          message = errorPayload.error.message;
-        }
-      } catch (parseError) {
-        if (rawBody) message = `${message}: ${rawBody}`;
-      }
-      throw new Error(message);
-    }
-
-    let data;
-    try {
-      data = JSON.parse(rawBody);
-    } catch (parseError) {
-      throw new Error("Failed to parse OpenAI response.");
-    }
-
-    return parseModelResponse(data);
-  }
-
-  function parseModelResponse(data) {
-    const content = extractResponseText(data);
-    const jsonBlock = extractJsonBlock(content);
-    if (!jsonBlock) {
-      throw new Error("Model response missing JSON block.");
-    }
-
-    let parsed;
-    try {
-      parsed = JSON.parse(jsonBlock);
-    } catch (error) {
-      throw new Error("Model returned invalid JSON.");
-    }
-
-    if (!parsed || typeof parsed !== "object") {
-      throw new Error("Model returned unsupported payload.");
-    }
-
-    return parsed;
-  }
-
-  function extractResponseText(data) {
-    if (!data || typeof data !== "object") return "";
-
-    if (Array.isArray(data.output)) {
-      const buffer = [];
-      for (const item of data.output) {
-        if (item?.type === "message" && Array.isArray(item.content)) {
-          for (const part of item.content) {
-            if (part?.type === "output_text" && typeof part.text === "string") {
-              buffer.push(part.text);
-            }
-          }
-        }
-      }
-      if (buffer.length) return buffer.join("\n");
-    }
-
-    if (Array.isArray(data.output_text)) {
-      const joined = data.output_text
-        .filter((t) => typeof t === "string")
-        .join("\n");
-      if (joined) return joined;
-    }
-
-    if (typeof data.content === "string") return data.content;
-
-    return "";
-  }
-
-  function extractJsonBlock(text) {
-    if (!text) return null;
-    const start = text.indexOf("{");
-    const end = text.lastIndexOf("}");
-    if (start === -1 || end === -1 || end <= start) return null;
-    return text.slice(start, end + 1);
   }
 
   function regenerate() {
