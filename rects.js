@@ -13,7 +13,6 @@
   const canvas = document.getElementById("rectCanvas");
   const ctx = canvas.getContext("2d");
 
-  const regenBtn = document.getElementById("regen");
   const statusEl = document.getElementById("status");
   const promptInput = document.getElementById("prompt");
   const runPromptBtn = document.getElementById("runPrompt");
@@ -444,18 +443,17 @@
   function setPromptBusy(isBusy) {
     if (runPromptBtn) {
       runPromptBtn.disabled = isBusy;
-      runPromptBtn.textContent = isBusy
-        ? "Generating..."
-        : promptButtonIdleLabel || "Generate";
-    }
-    if (regenBtn) {
-      regenBtn.disabled = isBusy;
+      if (isBusy) {
+        runPromptBtn.innerHTML = '<span class="icon">⏳</span>Generating...';
+      } else {
+        runPromptBtn.innerHTML = '<span class="icon">✨</span>Generate';
+      }
     }
   }
 
   async function handlePromptRun(event) {
     if (event) event.preventDefault();
-    const promptText = promptInput ? promptInput.value.trim() : "";
+    const promptText = promptInput ? promptInput.textContent.trim() : "";
     if (!promptText) {
       setStatusMessage("Enter a prompt to generate.");
       if (promptInput) promptInput.focus();
@@ -533,22 +531,19 @@
     );
   }
 
-  function regenerate() {
-    runWithConfig(DEFAULT_CONFIG, "defaults");
-  }
 
   function redrawActiveConfig() {
     runWithConfig(activeConfig, activeSourceLabel);
   }
 
   // Hook up UI
-  regenBtn.addEventListener("click", regenerate);
   if (runPromptBtn) {
     runPromptBtn.addEventListener("click", handlePromptRun);
   }
   if (promptInput) {
     promptInput.addEventListener("keydown", (event) => {
       if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+        event.preventDefault();
         handlePromptRun(event);
       }
     });
@@ -556,5 +551,5 @@
   window.addEventListener("resize", redrawActiveConfig);
 
   // Initial draw
-  regenerate();
+  runWithConfig(DEFAULT_CONFIG, "defaults");
 })();
