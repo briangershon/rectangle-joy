@@ -22,6 +22,12 @@
 
   const statusEl = document.getElementById("status");
   const promptInput = document.getElementById("prompt");
+  const historyListEl = document.getElementById("historyList");
+
+  const HISTORY_STORAGE_KEY = "rectangleArtHistory";
+  const HISTORY_LIMIT = 10;
+
+  let artHistory = [];
 
   const DEFAULT_CONFIG = Object.freeze({
     color: "#1f77b4",
@@ -120,6 +126,38 @@
       a.y + a.h < b.y ||
       b.y + b.h < a.y
     );
+  }
+
+  function sanitizeRectangles(rectangles) {
+    if (!Array.isArray(rectangles)) return [];
+    const cleaned = [];
+    for (const rect of rectangles) {
+      if (!rect || typeof rect !== "object") continue;
+      const x = Number(rect.x);
+      const y = Number(rect.y);
+      const w = Number(rect.w);
+      const h = Number(rect.h);
+      if (
+        !Number.isFinite(x) ||
+        !Number.isFinite(y) ||
+        !Number.isFinite(w) ||
+        !Number.isFinite(h)
+      ) {
+        continue;
+      }
+      cleaned.push({ x, y, w, h });
+    }
+    return cleaned;
+  }
+
+  function cloneColorZones(zones) {
+    if (!Array.isArray(zones)) return [];
+    return zones
+      .map((zone) => {
+        if (!zone || typeof zone !== "object") return null;
+        return { ...zone };
+      })
+      .filter(Boolean);
   }
 
   // Minimum edge-to-edge distance (Euclidean) between two axis-aligned rectangles.
@@ -429,7 +467,7 @@
     return DEFAULT_CONFIG.color;
   }
 
-  function runWithConfig(config, sourceLabel = "defaults") {
+  function runWithConfig(config, sourceLabel = "defaults", options = {}) {
     resizeCanvasToDisplaySize();
     const safeConfig = sanitizeConfig(config);
     console.log("Rectangle tool payload", {
@@ -447,17 +485,48 @@
     // Show placing rectangles message
     setStatusMessage("Placing rectangles...");
 
-    const rects = generateRectangles(
-      cssWidth,
-      cssHeight,
-      safeConfig.count,
-      safeConfig.minSize,
-      safeConfig.maxSize
-    );
+    const hasProvidedRectangles = Array.isArray(options.rectangles);
+    const providedRectangles = hasProvidedRectangles
+      ? sanitizeRectangles(options.rectangles)
+      : null;
+
+    const rects = hasProvidedRectangles
+      ? providedRectangles
+      : generateRectangles(
+          cssWidth,
+          cssHeight,
+          safeConfig.count,
+          safeConfig.minSize,
+          safeConfig.maxSize
+        );
+
     draw(rects, safeConfig.color, safeConfig.colorZones || []);
 
-    // Show final result
-    setStatusMessage(`Placed ${rects.length}/${safeConfig.count} rectangles`);
+    const statusMessage = hasProvidedRectangles
+      ? `Loaded saved art with ${rects.length} rectangles`
+      : `Placed ${rects.length}/${safeConfig.count} rectangles`;
+    setStatusMessage(statusMessage);
+
+    const renderDetails = {
+      rects: sanitizeRectangles(rects),
+      config: {
+        ...safeConfig,
+        colorZones: cloneColorZones(safeConfig.colorZones),
+      },
+      canvasWidth: cssWidth,
+      canvasHeight: cssHeight,
+      source: sourceLabel,
+    };
+
+    if (typeof options.onRendered === "function") {
+      try {
+        options.onRendered(renderDetails);
+      } catch (callbackError) {
+        console.warn("History callback failed", callbackError);
+      }
+    }
+
+    return renderDetails;
   }
 
   function runWithArtPlan(artPlan, sourceLabel = "art plan") {
@@ -484,7 +553,7 @@
     };
 
     console.log("Debug: Combined config for art plan:", combinedConfig);
-    runWithConfig(combinedConfig, sourceLabel);
+    return runWithConfig(combinedConfig, sourceLabel);
   }
 
 
@@ -533,12 +602,17 @@
 
       setStatusMessage("Generating artwork...");
 
+      let renderOutcome = null;
       if (result.type === "rectangles") {
-        runWithConfig(result.config, "rectangles");
+        renderOutcome = runWithConfig(result.config, "rectangles");
       } else if (result.type === "art_plan") {
-        runWithArtPlan(result.config, "art plan");
+        renderOutcome = runWithArtPlan(result.config, "art plan");
       } else {
         throw new Error("Unknown result type from AI");
+      }
+
+      if (renderOutcome) {
+        persistPromptResult(promptText, result.type, renderOutcome);
       }
     } catch (error) {
       console.error(error);
@@ -625,6 +699,166 @@
 
   // Initialize shader system after DOM is ready
   initShaderSystem();
+
+  function loadArtHistory() {
+    if (typeof window === "undefined" || !window.localStorage) {
+      return [];
+    }
+    try {
+      const raw = window.localStorage.getItem(HISTORY_STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .map((entry) => sanitizeHistoryEntry(entry))
+        .filter(Boolean)
+        .slice(0, HISTORY_LIMIT);
+    } catch (error) {
+      console.warn("Failed to load art history", error);
+      return [];
+    }
+  }
+
+  function sanitizeHistoryEntry(entry) {
+    if (!entry || typeof entry !== "object") return null;
+    const prompt = typeof entry.prompt === "string" ? entry.prompt : "";
+    const resultType = typeof entry.resultType === "string" ? entry.resultType : "unknown";
+    const createdAt = Number(entry.createdAt);
+    const id = typeof entry.id === "string" ? entry.id : null;
+    if (!id || !Number.isFinite(createdAt)) return null;
+
+    const config = sanitizeConfig(entry.config || {});
+    config.colorZones = cloneColorZones(entry.config?.colorZones || config.colorZones);
+
+    const rectangles = sanitizeRectangles(entry.rectangles);
+
+    return {
+      id,
+      prompt,
+      resultType,
+      createdAt,
+      config,
+      rectangles,
+      canvasWidth: Number(entry.canvasWidth) || 0,
+      canvasHeight: Number(entry.canvasHeight) || 0,
+    };
+  }
+
+  function saveArtHistory(entries) {
+    if (typeof window === "undefined" || !window.localStorage) {
+      return;
+    }
+    try {
+      const payload = JSON.stringify(entries.slice(0, HISTORY_LIMIT));
+      window.localStorage.setItem(HISTORY_STORAGE_KEY, payload);
+    } catch (error) {
+      console.warn("Failed to save art history", error);
+    }
+  }
+
+  function formatHistoryTimestamp(timestamp) {
+    try {
+      return new Date(timestamp).toLocaleString();
+    } catch (error) {
+      return String(timestamp);
+    }
+  }
+
+  function updateHistoryUI() {
+    if (!historyListEl) return;
+    historyListEl.innerHTML = "";
+
+    if (!artHistory.length) {
+      const emptyItem = document.createElement("li");
+      emptyItem.className = "history-empty";
+      emptyItem.textContent = "No saved art yet.";
+      historyListEl.appendChild(emptyItem);
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    for (const entry of artHistory) {
+      const item = document.createElement("li");
+      item.className = "history-item";
+
+      const label = document.createElement("span");
+      label.textContent = `${entry.prompt || "(untitled)"} • ${formatHistoryTimestamp(entry.createdAt)}`;
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = "View";
+      button.addEventListener("click", () => {
+        loadHistoryEntry(entry.id);
+      });
+
+      item.appendChild(label);
+      item.appendChild(button);
+      fragment.appendChild(item);
+    }
+
+    historyListEl.appendChild(fragment);
+  }
+
+  function generateHistoryId(timestamp) {
+    return `${timestamp}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  function loadHistoryEntry(entryId) {
+    const entry = artHistory.find((item) => item.id === entryId);
+    if (!entry) return;
+
+    if (promptInput) {
+      promptInput.textContent = entry.prompt;
+    }
+
+    runWithConfig(entry.config, "history", {
+      rectangles: entry.rectangles,
+    });
+
+    setStatusMessage(`Loaded saved art from prompt: "${entry.prompt}"`);
+  }
+
+  function createHistoryEntry({ prompt, resultType, renderDetails }) {
+    if (!renderDetails || !Array.isArray(renderDetails.rects)) return null;
+    const timestamp = Date.now();
+    const id = generateHistoryId(timestamp);
+
+    return {
+      id,
+      prompt: prompt || "",
+      resultType,
+      createdAt: timestamp,
+      config: {
+        ...renderDetails.config,
+        colorZones: cloneColorZones(renderDetails.config?.colorZones),
+      },
+      rectangles: sanitizeRectangles(renderDetails.rects),
+      canvasWidth: renderDetails.canvasWidth || 0,
+      canvasHeight: renderDetails.canvasHeight || 0,
+    };
+  }
+
+  function addHistoryEntry(entry) {
+    if (!entry) return;
+    artHistory.unshift(entry);
+    if (artHistory.length > HISTORY_LIMIT) {
+      artHistory = artHistory.slice(0, HISTORY_LIMIT);
+    }
+    saveArtHistory(artHistory);
+    updateHistoryUI();
+  }
+
+  function persistPromptResult(promptText, resultType, renderDetails) {
+    const entry = createHistoryEntry({
+      prompt: promptText,
+      resultType,
+      renderDetails,
+    });
+    addHistoryEntry(entry);
+  }
+
+  artHistory = loadArtHistory();
+  updateHistoryUI();
 
   // Initial draw
   runWithConfig(DEFAULT_CONFIG, "defaults");

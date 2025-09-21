@@ -70,6 +70,63 @@
         opacity: 0.8;
       }
 
+      .history {
+        width: 100%;
+        max-width: 800px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 8px;
+      }
+
+      .history-title {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #1f2937;
+        text-align: left;
+      }
+
+      .history-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .history-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border: 1px solid #e5e7eb;
+        border-radius: 6px;
+        padding: 8px 10px;
+        background: #f9fafb;
+        font-size: 0.85rem;
+        color: #374151;
+      }
+
+      .history-item button {
+        border: none;
+        background: #3b82f6;
+        color: #fff;
+        padding: 6px 10px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.8rem;
+      }
+
+      .history-item button:hover {
+        background: #2563eb;
+      }
+
+      .history-empty {
+        padding: 8px 0;
+        color: #6b7280;
+        font-size: 0.85rem;
+      }
+
       canvas {
         display: block;
         width: 100%;
@@ -142,6 +199,10 @@
           blue rectangles
         </h1>
         <span class="status" id="status">—</span>
+        <div class="history" id="historySection">
+          <span class="history-title">Previous Art</span>
+          <ul id="historyList" class="history-list"></ul>
+        </div>
       </header>
       <canvas id="rectCanvas"></canvas>
       <div class="about">
