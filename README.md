@@ -2,7 +2,10 @@
 
 The delight of creating abstract rectangle art.
 
-An app where you type an idea and an LLM orchestrates thousands of tightly packed rectangles -- adjusting zones, colors, and densities -- to paint abstract scenes.
+Type a prompt and watch an LLM provided by OpenAI conduct thousands of
+rectangles into a meditative composition. The project blends
+lightweight math, WebGL shaders, and an Express bridge backed by Neon
+serverless Postgres to store each generated canvas for later replay.
 
 ![art work of lounging on the beach](lounging-on-the-beach.jpg)
 
