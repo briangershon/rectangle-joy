@@ -14,11 +14,12 @@
   const ctx = canvas.getContext("2d");
 
   const regenBtn = document.getElementById("regen");
-  const colorInput = document.getElementById("color");
-  const countInput = document.getElementById("count");
-  const minSizeInput = document.getElementById("minSize");
-  const maxSizeInput = document.getElementById("maxSize");
   const statusEl = document.getElementById("status");
+
+  const DEFAULT_COLOR = "#1f77b4";
+  const DEFAULT_TARGET_COUNT = 1000;
+  const DEFAULT_MIN_SIZE = 8;
+  const DEFAULT_MAX_SIZE = 60;
 
   // Resize canvas to device pixels for crispness
   function resizeCanvasToDisplaySize() {
@@ -167,43 +168,26 @@
     }
   }
 
-  function updateStatus(placed, target, attempts) {
+  function updateStatus(placed, target) {
     statusEl.textContent = `Placed ${placed} / ${target} rectangles`;
   }
 
   function regenerate() {
     resizeCanvasToDisplaySize();
 
-    const color = colorInput.value || "#1f77b4";
-    const target = clamp(parseInt(countInput.value, 10) || 1000, 1, 5000);
-    const minSize = clamp(parseInt(minSizeInput.value, 10) || 8, 2, 1000);
-    const maxSize = clamp(
-      parseInt(maxSizeInput.value, 10) || 60,
-      minSize,
-      2000
-    );
-
     const rects = generateRectangles(
       canvas.width,
       canvas.height,
-      target,
-      minSize,
-      maxSize
+      DEFAULT_TARGET_COUNT,
+      DEFAULT_MIN_SIZE,
+      DEFAULT_MAX_SIZE
     );
-    draw(rects, color);
-    updateStatus(rects.length, target);
-  }
-
-  function clamp(v, min, max) {
-    return Math.max(min, Math.min(max, v));
+    draw(rects, DEFAULT_COLOR);
+    updateStatus(rects.length, DEFAULT_TARGET_COUNT);
   }
 
   // Hook up UI
   regenBtn.addEventListener("click", regenerate);
-  colorInput.addEventListener("input", regenerate);
-  countInput.addEventListener("change", regenerate);
-  minSizeInput.addEventListener("change", regenerate);
-  maxSizeInput.addEventListener("change", regenerate);
   window.addEventListener("resize", regenerate);
 
   // Initial draw
